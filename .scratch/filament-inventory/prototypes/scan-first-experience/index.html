@@ -1,0 +1,807 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="light">
+  <title>FilaManager — scan-first experience prototype</title>
+  <style>
+    :root {
+      --ink: #18211b;
+      --muted: #68736b;
+      --paper: #f4f2e9;
+      --surface: #fffef8;
+      --line: #d8ddd5;
+      --green: #235c44;
+      --green-2: #d8eadf;
+      --lime: #d7f171;
+      --orange: #e8743b;
+      --blue: #315dd7;
+      --red: #b94438;
+      --shadow: 0 18px 55px rgba(32, 49, 39, .14);
+      --radius: 22px;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at 15% 0%, rgba(215, 241, 113, .32), transparent 28rem),
+        #e5e9e2;
+      min-height: 100vh;
+    }
+    button, input, select, textarea { font: inherit; }
+    button { color: inherit; }
+    button:focus-visible, input:focus-visible, select:focus-visible {
+      outline: 3px solid rgba(49, 93, 215, .28);
+      outline-offset: 2px;
+    }
+    .shell {
+      width: min(100%, 560px);
+      min-height: 100vh;
+      margin: 0 auto;
+      background: var(--surface);
+      position: relative;
+      padding-bottom: 112px;
+      box-shadow: 0 0 70px rgba(16, 31, 22, .12);
+      overflow: hidden;
+    }
+    .prototype-flag {
+      padding: 8px 18px;
+      color: #eef7f0;
+      background: #18211b;
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: .12em;
+      text-align: center;
+      text-transform: uppercase;
+    }
+    header { padding: 20px 20px 12px; }
+    .brand-row, .row, .between { display: flex; align-items: center; gap: 12px; }
+    .between { justify-content: space-between; }
+    .brand-mark {
+      display: grid;
+      width: 38px;
+      height: 38px;
+      place-items: center;
+      border-radius: 13px;
+      background: var(--green);
+      color: white;
+      font-weight: 900;
+      letter-spacing: -.08em;
+    }
+    .brand { font-size: 18px; font-weight: 850; letter-spacing: -.03em; }
+    .eyebrow {
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+    }
+    h1, h2, h3, p { margin-top: 0; }
+    h1 { margin-bottom: 10px; font-size: clamp(30px, 8vw, 44px); line-height: 1.02; letter-spacing: -.055em; }
+    h2 { margin-bottom: 8px; font-size: 24px; line-height: 1.12; letter-spacing: -.035em; }
+    h3 { margin-bottom: 5px; font-size: 16px; }
+    p { color: var(--muted); line-height: 1.48; }
+    .lede { font-size: 16px; }
+    main { padding: 0 18px 20px; }
+    .section { margin-top: 20px; }
+    .section-title { margin: 0 2px 10px; }
+    .card {
+      background: white;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 16px;
+      box-shadow: 0 5px 20px rgba(29, 48, 36, .05);
+    }
+    .card + .card { margin-top: 10px; }
+    .card.flush { padding: 0; overflow: hidden; }
+    .soft { background: #f1f5ef; box-shadow: none; }
+    .dark { background: #183327; color: white; border-color: #183327; }
+    .dark p, .dark .muted { color: #c3d0c7; }
+    .accent { background: var(--lime); border-color: #c4dc63; box-shadow: none; }
+    .muted, small { color: var(--muted); }
+    .tiny { font-size: 12px; }
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      min-height: 28px;
+      padding: 5px 10px;
+      border-radius: 999px;
+      background: #eef1ed;
+      color: #4d5951;
+      font-size: 12px;
+      font-weight: 750;
+    }
+    .pill.good { color: #174f38; background: #dcefe3; }
+    .pill.warn { color: #80391d; background: #f9e3d4; }
+    .pill.blue { color: #2545a0; background: #e1e8ff; }
+    .dot { width: 9px; height: 9px; border-radius: 50%; background: currentColor; }
+    .btn {
+      min-height: 46px;
+      border: 0;
+      border-radius: 15px;
+      padding: 11px 15px;
+      background: #e9ede8;
+      font-weight: 800;
+      cursor: pointer;
+    }
+    .btn:hover { filter: brightness(.98); transform: translateY(-1px); }
+    .btn.primary { background: var(--green); color: white; }
+    .btn.lime { background: var(--lime); color: #1c2a20; }
+    .btn.ghost { border: 1px solid var(--line); background: white; }
+    .btn.danger { color: var(--red); background: #f8e7e4; }
+    .btn.block { display: block; width: 100%; }
+    .button-stack { display: grid; gap: 9px; }
+    .button-row { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; }
+    .icon-btn {
+      width: 42px; height: 42px; border: 1px solid var(--line); border-radius: 14px;
+      background: white; cursor: pointer; font-weight: 900;
+    }
+    .scan-hero {
+      display: grid;
+      grid-template-columns: 76px 1fr;
+      gap: 17px;
+      align-items: center;
+      width: 100%;
+      padding: 20px;
+      border: 0;
+      border-radius: 28px;
+      color: white;
+      background: linear-gradient(135deg, #173c2b, #28654b);
+      box-shadow: var(--shadow);
+      text-align: left;
+      cursor: pointer;
+    }
+    .scan-glyph {
+      display: grid; place-items: center; width: 76px; height: 76px;
+      border: 2px solid rgba(255,255,255,.75); border-radius: 24px; font-size: 34px;
+      background: rgba(255,255,255,.08);
+    }
+    .scan-hero strong { display: block; margin-bottom: 4px; font-size: 23px; }
+    .scan-hero span { color: #c9dbd1; line-height: 1.35; }
+    .search {
+      width: 100%; min-height: 48px; border: 1px solid var(--line); border-radius: 16px;
+      background: white; padding: 0 15px;
+    }
+    .spool {
+      display: grid;
+      grid-template-columns: 40px 1fr auto;
+      gap: 12px;
+      align-items: center;
+      width: 100%;
+      border: 0;
+      background: transparent;
+      padding: 12px 4px;
+      text-align: left;
+      cursor: pointer;
+    }
+    .spool + .spool { border-top: 1px solid #edf0ec; }
+    .swatch {
+      width: 40px; height: 40px; border-radius: 50%; background: var(--swatch, #777);
+      border: 7px solid rgba(255,255,255,.72); box-shadow: inset 0 0 0 2px rgba(0,0,0,.13), 0 0 0 1px #d7ddd7;
+    }
+    .spool strong { display: block; font-size: 14px; }
+    .spool .meta { margin-top: 3px; color: var(--muted); font-size: 12px; }
+    .qty { font-variant-numeric: tabular-nums; font-weight: 850; }
+    .slot {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      align-items: center;
+      gap: 10px;
+      width: 100%;
+      padding: 14px;
+      border: 1px solid var(--line);
+      border-radius: 17px;
+      background: white;
+      text-align: left;
+      cursor: pointer;
+    }
+    .slot + .slot { margin-top: 8px; }
+    .slot.empty { border-style: dashed; background: #f8faf7; }
+    .slot strong { display: block; }
+    .slot small { display: block; margin-top: 4px; }
+    .chevron { color: #8b948d; font-size: 20px; }
+    .bottom-nav {
+      position: sticky;
+      bottom: 82px;
+      z-index: 5;
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 4px;
+      margin: 22px 12px 0;
+      padding: 6px;
+      border: 1px solid var(--line);
+      border-radius: 20px;
+      background: rgba(255,255,255,.94);
+      box-shadow: 0 10px 35px rgba(24, 40, 30, .13);
+      backdrop-filter: blur(12px);
+    }
+    .nav-btn { border: 0; background: transparent; border-radius: 14px; padding: 9px 3px; font-size: 11px; font-weight: 800; cursor: pointer; }
+    .nav-btn.active { color: white; background: var(--green); }
+    .nav-icon { display: block; margin-bottom: 3px; font-size: 18px; }
+    .scenario-lab { margin: 5px 18px 16px; }
+    .scenario-lab summary, .state-panel summary { cursor: pointer; font-weight: 850; }
+    .scenario-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 7px; margin-top: 12px; }
+    .scenario-grid .btn { min-height: 38px; padding: 8px; font-size: 12px; }
+    .status-band {
+      display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 10px 0 18px;
+    }
+    .metric { border-radius: 18px; padding: 13px 11px; background: #edf2ec; }
+    .metric strong { display: block; font-size: 24px; letter-spacing: -.04em; }
+    .metric span { color: var(--muted); font-size: 11px; font-weight: 700; }
+    .task-grid { display: grid; gap: 10px; }
+    .task-card {
+      display: grid; grid-template-columns: 50px 1fr auto; gap: 13px; align-items: center;
+      width: 100%; min-height: 82px; border: 1px solid var(--line); border-radius: 20px;
+      padding: 13px; background: white; text-align: left; cursor: pointer;
+    }
+    .task-card .task-icon { display: grid; place-items: center; width: 50px; height: 50px; border-radius: 16px; background: #edf3ed; font-size: 24px; }
+    .task-card strong { display: block; font-size: 16px; }
+    .task-card small { display: block; margin-top: 4px; }
+    .step-rail { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; margin: 8px 0 20px; }
+    .step { height: 5px; border-radius: 8px; background: #dfe4df; }
+    .step.on { background: var(--orange); }
+    .workspace-tabs { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 3px; }
+    .workspace-tabs .btn { min-height: 38px; padding: 8px 12px; white-space: nowrap; }
+    .map-board { display: grid; gap: 14px; }
+    .map-column { border: 1px solid var(--line); border-radius: 22px; padding: 14px; background: #f5f7f3; }
+    .map-column > .between { margin-bottom: 11px; }
+    .map-column .slot { border-radius: 14px; padding: 11px; }
+    .command-bar { display: grid; grid-template-columns: 1.2fr 1fr 1fr; gap: 7px; margin: 18px 0; }
+    .command-bar .btn { padding: 9px 6px; font-size: 12px; }
+    .timeline { border-left: 2px solid #d6ddd7; padding-left: 16px; }
+    .timeline-item { position: relative; padding: 0 0 16px; }
+    .timeline-item::before { content: ''; position: absolute; left: -21px; top: 4px; width: 8px; height: 8px; border-radius: 50%; background: var(--green); }
+    .timeline-item p { margin: 4px 0 0; font-size: 13px; }
+    .state-panel { margin: 20px 18px 0; border: 1px dashed #aeb8b0; border-radius: 18px; padding: 13px; background: #f4f6f3; }
+    .state-lines { display: grid; gap: 5px; margin-top: 12px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; line-height: 1.4; }
+    .state-lines span { padding: 5px 7px; border-radius: 8px; background: white; }
+    .sheet-backdrop {
+      position: fixed; inset: 0; z-index: 30; display: grid; place-items: end center;
+      padding: 18px; background: rgba(15, 24, 18, .48); backdrop-filter: blur(4px);
+    }
+    .sheet {
+      width: min(100%, 524px); max-height: min(86vh, 780px); overflow-y: auto;
+      border-radius: 28px; padding: 20px; background: var(--surface); box-shadow: var(--shadow);
+    }
+    .sheet-handle { width: 42px; height: 5px; margin: -8px auto 18px; border-radius: 9px; background: #ccd2cd; }
+    .field { display: grid; gap: 6px; margin: 13px 0; }
+    .field label { color: #505d54; font-size: 12px; font-weight: 800; }
+    .field input, .field select {
+      width: 100%; min-height: 48px; border: 1px solid var(--line); border-radius: 14px; padding: 0 13px; background: white;
+    }
+    .review { display: grid; gap: 8px; margin: 15px 0; padding: 14px; border-radius: 16px; background: #eff3ee; }
+    .review div { display: flex; justify-content: space-between; gap: 15px; }
+    .review span { color: var(--muted); }
+    .warning { padding: 13px; border-radius: 15px; color: #713318; background: #fce8dc; line-height: 1.4; }
+    .toast {
+      position: fixed; z-index: 40; left: 50%; bottom: 96px; transform: translateX(-50%);
+      width: min(calc(100% - 32px), 500px); padding: 13px 16px; border-radius: 16px;
+      color: white; background: #17251d; box-shadow: var(--shadow); font-weight: 750;
+    }
+    .prototype-switcher {
+      position: fixed; z-index: 50; left: 50%; bottom: max(14px, env(safe-area-inset-bottom));
+      transform: translateX(-50%); display: grid; grid-template-columns: 42px minmax(160px, 1fr) 42px;
+      align-items: center; gap: 5px; padding: 6px; border-radius: 999px;
+      color: white; background: #111713; box-shadow: 0 14px 40px rgba(0,0,0,.28);
+    }
+    .prototype-switcher button { width: 42px; height: 38px; border: 0; border-radius: 999px; color: white; background: #2d3931; cursor: pointer; }
+    .variant-label { text-align: center; font-size: 12px; font-weight: 850; }
+    .empty-state { padding: 25px 14px; text-align: center; }
+    .empty-state .big { display: block; margin-bottom: 8px; font-size: 35px; }
+    .divider { height: 1px; margin: 15px 0; background: var(--line); }
+    .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
+    @media (min-width: 760px) {
+      body { padding: 24px 0; }
+      .shell { min-height: calc(100vh - 48px); border-radius: 32px; }
+      .sheet-backdrop { place-items: center; }
+    }
+  </style>
+</head>
+<body>
+  <div id="app"></div>
+  <script>
+    // Three variants of the scan-first inventory experience, switchable via ?variant=.
+    // THROWAWAY PROTOTYPE: no persistence, no NFC, no production error handling.
+    const variantNames = { A: 'Scan home', B: 'Guided tasks', C: 'Inventory map' };
+    const variants = Object.keys(variantNames);
+
+    const seed = () => ({
+      spools: [
+        { id: 'p1', label: 'Galaxy Black', material: 'PLA', color: '#20242b', grams: 642, state: 'Stored', locationId: 's1' },
+        { id: 'p2', label: 'Sunset Orange', material: 'PETG', color: '#e86b31', grams: 388, state: 'Stored', locationId: 's3' },
+        { id: 'p3', label: 'Everyday White', material: 'PLA', color: '#e7e6df', grams: 220, state: 'Loaded', locationId: 'm1' },
+        { id: 'p4', label: 'Ocean Blue', material: 'TPU', color: '#2766c7', grams: 810, state: 'Unlocated', locationId: null },
+        { id: 'p5', label: 'Old Red', material: 'PLA', color: '#a83832', grams: 0, state: 'Consumed', locationId: null }
+      ],
+      slots: [
+        { id: 's1', kind: 'storage', name: 'Shelf A · 1', group: 'Workshop wall' },
+        { id: 's2', kind: 'storage', name: 'Shelf A · 2', group: 'Workshop wall' },
+        { id: 's3', kind: 'storage', name: 'Dry box · 1', group: 'Workbench' },
+        { id: 'm1', kind: 'material', name: 'Slot 1', group: 'AMS Lite' },
+        { id: 'm2', kind: 'material', name: 'Slot 2', group: 'AMS Lite' },
+        { id: 'm3', kind: 'material', name: 'Slot 3', group: 'AMS Lite' },
+        { id: 'm4', kind: 'material', name: 'Slot 4', group: 'AMS Lite' }
+      ]
+    });
+
+    const initialVariant = new URLSearchParams(location.search).get('variant')?.toUpperCase();
+    const state = {
+      ...seed(),
+      variant: variants.includes(initialVariant) ? initialVariant : 'A',
+      view: 'home',
+      scannedSlotId: null,
+      modal: null,
+      notice: null,
+      lastEvent: 'Prototype loaded — inventory unchanged.',
+      history: ['Prototype loaded — inventory unchanged.']
+    };
+
+    const $ = (selector) => document.querySelector(selector);
+    const esc = (value) => String(value ?? '').replace(/[&<>'"]/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' })[char]);
+    const spool = id => state.spools.find(item => item.id === id);
+    const slot = id => state.slots.find(item => item.id === id);
+    const occupant = slotId => state.spools.find(item => item.locationId === slotId && ['Stored', 'Loaded'].includes(item.state));
+    const activeSpools = () => state.spools.filter(item => ['Stored', 'Loaded', 'Unlocated'].includes(item.state));
+    const archivedSpools = () => state.spools.filter(item => ['Consumed', 'Retired'].includes(item.state));
+    const locationName = item => item.locationId ? `${slot(item.locationId).group} · ${slot(item.locationId).name}` : item.state;
+    const emptySlots = kind => state.slots.filter(item => item.kind === kind && !occupant(item.id));
+
+    function record(message) {
+      state.lastEvent = message;
+      state.history.unshift(message);
+      state.history = state.history.slice(0, 5);
+      state.notice = message;
+    }
+
+    function resetPrototype() {
+      const fresh = seed();
+      state.spools = fresh.spools;
+      state.slots = fresh.slots;
+      state.view = 'home';
+      state.scannedSlotId = null;
+      state.modal = null;
+      state.history = ['Prototype reset — inventory returned to seed data.'];
+      record('Prototype reset — inventory returned to seed data.');
+    }
+
+    function spoolRow(item) {
+      return `<button class="spool filterable" data-filter-text="${esc(`${item.label} ${item.material} ${item.state} ${locationName(item)}`.toLowerCase())}" data-action="details" data-spool="${item.id}">
+        <span class="swatch" style="--swatch:${item.color}"></span>
+        <span><strong>${esc(item.label)}</strong><span class="meta">${esc(item.material)} · ${esc(locationName(item))}</span></span>
+        <span class="qty">${item.grams} g</span>
+      </button>`;
+    }
+
+    function slotRow(item, action = 'scan-slot') {
+      const held = occupant(item.id);
+      return `<button class="slot ${held ? '' : 'empty'}" data-action="${action}" data-slot="${item.id}">
+        <span><strong>${esc(item.name)}</strong><small>${held ? `${esc(held.label)} · ${held.grams} g` : 'Empty'}</small></span>
+        <span class="chevron">›</span>
+      </button>`;
+    }
+
+    function scenarioLab() {
+      return `<details class="scenario-lab card soft">
+        <summary>Scenario lab <span class="muted tiny">— jump to a test condition</span></summary>
+        <div class="scenario-grid">
+          <button class="btn ghost" data-action="scenario" data-scenario="occupied">Occupied scan</button>
+          <button class="btn ghost" data-action="scenario" data-scenario="empty">Empty scan</button>
+          <button class="btn ghost" data-action="scenario" data-scenario="unknown">Unknown tag</button>
+          <button class="btn ghost" data-action="scenario" data-scenario="conflict">Occupied destination</button>
+          <button class="btn ghost" data-action="scenario" data-scenario="nfc-off">NFC unavailable</button>
+          <button class="btn ghost" data-action="scenario" data-scenario="interrupted">Interrupted action</button>
+          <button class="btn ghost" data-action="reset">Reset prototype</button>
+        </div>
+      </details>`;
+    }
+
+    function inventoryList(includeSearch = true) {
+      return `<div class="card flush">
+        ${includeSearch ? '<div style="padding:14px 14px 4px"><label class="sr-only" for="spool-search">Search spools</label><input id="spool-search" class="search" data-filter placeholder="Search label, material, state, or place…"></div>' : ''}
+        <div style="padding:5px 14px 10px">${activeSpools().map(spoolRow).join('')}</div>
+      </div>`;
+    }
+
+    function archiveList() {
+      const rows = archivedSpools().map(spoolRow).join('');
+      return `<div class="section"><div class="section-title"><span class="eyebrow">History kept permanently</span><h2>Archive</h2></div>
+        <div class="card flush">${rows ? `<div style="padding:5px 14px">${rows}</div>` : '<div class="empty-state"><span class="big">✓</span>No archived spools in this test state.</div>'}</div>
+      </div>`;
+    }
+
+    function slotContext() {
+      const item = slot(state.scannedSlotId);
+      if (!item) return '';
+      const held = occupant(item.id);
+      if (held) {
+        return `<div class="section">
+          <span class="pill good">✓ Valid storage-slot tag</span>
+          <h1 style="margin-top:12px">${esc(item.name)}</h1>
+          <p>${esc(item.group)} · This scan opened a read-only slot context.</p>
+          <div class="card accent">
+            <span class="eyebrow">Stored here</span>
+            <div style="margin-top:12px">${spoolRow(held)}</div>
+          </div>
+          <div class="section button-stack">
+            <button class="btn primary block" data-action="start-checkout" data-spool="${held.id}">Check out to a material slot</button>
+            <button class="btn ghost block" data-action="details" data-spool="${held.id}">View spool details</button>
+            <button class="btn ghost block" data-action="scenario" data-scenario="conflict">Correct an assignment</button>
+          </div>
+          <p class="tiny">Scanning alone changed nothing. A movement commits only after review and confirmation.</p>
+        </div>`;
+      }
+      return `<div class="section">
+        <span class="pill good">✓ Valid storage-slot tag</span>
+        <h1 style="margin-top:12px">${esc(item.name)}</h1>
+        <p>${esc(item.group)} · Empty and ready to receive one spool.</p>
+        <div class="card soft empty-state"><span class="big">○</span><strong>No spool recorded here</strong><p style="margin:6px 0 0">Choose what is physically in front of you.</p></div>
+        <div class="section button-stack">
+          <button class="btn primary block" data-action="start-checkin" data-slot="${item.id}">Check in a loaded spool</button>
+          <button class="btn ghost block" data-action="start-place" data-slot="${item.id}">Place an Unlocated spool</button>
+          <button class="btn ghost block" data-action="start-register" data-slot="${item.id}">Register a new spool here</button>
+        </div>
+        <p class="tiny">Scanning alone changed nothing. This slot is not reserved until an action is confirmed.</p>
+      </div>`;
+    }
+
+    function renderA() {
+      let content;
+      if (state.view === 'scan' && state.scannedSlotId) content = slotContext();
+      else if (state.view === 'inventory') content = `<div class="section"><div class="section-title"><span class="eyebrow">Manual path</span><h2>All active spools</h2></div>${inventoryList(true)}</div>`;
+      else if (state.view === 'places') content = `<div class="section"><div class="section-title"><span class="eyebrow">Browse without NFC</span><h2>Places</h2></div><h3>Storage</h3>${state.slots.filter(s => s.kind === 'storage').map(slotRow).join('')}<h3 style="margin-top:18px">AMS Lite</h3>${state.slots.filter(s => s.kind === 'material').map(s => slotRow(s, 'open-slot')).join('')}</div>`;
+      else if (state.view === 'archive') content = archiveList();
+      else content = `<div class="section">
+          <span class="eyebrow">Ready when you are</span>
+          <h1>Find the slot.<br>Move the spool.</h1>
+          <p class="lede">Scanning is the fastest way in. Every action also works manually.</p>
+          <button class="scan-hero" data-action="scan-menu">
+            <span class="scan-glyph">⌁</span><span><strong>Scan storage slot</strong>Hold the top of your phone near a tag.</span>
+          </button>
+        </div>
+        <div class="section"><div class="between section-title"><div><span class="eyebrow">Manual lookup</span><h2 style="margin:2px 0 0">Find a spool</h2></div><button class="btn ghost" data-action="nav" data-view="inventory">See all</button></div>${inventoryList(true)}</div>`;
+
+      return `<div class="shell">
+        <div class="prototype-flag">Throwaway prototype · Variant A</div>
+        <header><div class="brand-row"><span class="brand-mark">F</span><div><div class="brand">FilaManager</div><div class="tiny muted">Scan-led context</div></div><span style="margin-left:auto" class="pill good"><span class="dot"></span> Local</span></div></header>
+        ${scenarioLab()}
+        <main>${content}</main>
+        <nav class="bottom-nav" aria-label="Primary">
+          ${navButton('home', '⌂', 'Home')}${navButton('inventory', '◎', 'Spools')}${navButton('places', '▦', 'Places')}${navButton('archive', '↺', 'Archive')}
+        </nav>
+        ${statePanel()}
+        ${overlays()}
+        ${switcher()}
+      </div>`;
+    }
+
+    function navButton(view, icon, label) {
+      const active = state.view === view || (view === 'home' && state.view === 'scan');
+      return `<button class="nav-btn ${active ? 'active' : ''}" data-action="nav" data-view="${view}"><span class="nav-icon">${icon}</span>${label}</button>`;
+    }
+
+    function renderB() {
+      const loaded = state.spools.filter(s => s.state === 'Loaded').length;
+      let workspace;
+      if (state.view === 'inventory') workspace = `<div class="section"><h2>Choose a spool</h2><p>Search first; scanning is an optional shortcut.</p>${inventoryList(true)}</div>`;
+      else if (state.view === 'places') workspace = `<div class="section"><h2>Choose a place</h2><p>Select the physical destination, then the app asks what you intend to do.</p>${state.slots.map(slotRow).join('')}</div>`;
+      else if (state.view === 'archive') workspace = archiveList();
+      else if (state.view === 'scan' && state.scannedSlotId) workspace = `<div class="section"><div class="step-rail"><span class="step on"></span><span class="step"></span><span class="step"></span></div>${slotContext()}</div>`;
+      else workspace = `<div class="section">
+          <span class="eyebrow">Start with your intention</span><h1>What are you doing?</h1>
+          <p class="lede">Choose a task. Each guide accepts either a scan or a manual selection.</p>
+          <div class="task-grid">
+            <button class="task-card" data-action="scan-menu"><span class="task-icon">⌁</span><span><strong>Move a spool</strong><small>Scan a storage slot to check in or out</small></span><span class="chevron">›</span></button>
+            <button class="task-card" data-action="nav" data-view="inventory"><span class="task-icon">⌕</span><span><strong>Find or inspect</strong><small>Search all active spools manually</small></span><span class="chevron">›</span></button>
+            <button class="task-card" data-action="start-register"><span class="task-icon">＋</span><span><strong>Register a spool</strong><small>Add it now; choose a place or leave Unlocated</small></span><span class="chevron">›</span></button>
+            <button class="task-card" data-action="scenario" data-scenario="conflict"><span class="task-icon">↔</span><span><strong>Fix inventory</strong><small>Correct an assignment that disagrees with reality</small></span><span class="chevron">›</span></button>
+          </div>
+        </div>`;
+      return `<div class="shell">
+        <div class="prototype-flag">Throwaway prototype · Variant B</div>
+        <header><div class="between"><div><span class="eyebrow">FilaManager</span><h2 style="margin:3px 0">Guided tasks</h2></div><span class="pill blue">${loaded} loaded</span></div>
+          <div class="workspace-tabs"><button class="btn ${state.view === 'home' ? 'primary' : 'ghost'}" data-action="nav" data-view="home">Tasks</button><button class="btn ${state.view === 'inventory' ? 'primary' : 'ghost'}" data-action="nav" data-view="inventory">Spools</button><button class="btn ${state.view === 'places' ? 'primary' : 'ghost'}" data-action="nav" data-view="places">Places</button><button class="btn ${state.view === 'archive' ? 'primary' : 'ghost'}" data-action="nav" data-view="archive">Archive</button></div>
+        </header>
+        ${scenarioLab()}
+        <main>${workspace}</main>
+        ${statePanel()}
+        ${overlays()}
+        ${switcher()}
+      </div>`;
+    }
+
+    function renderC() {
+      const stored = state.spools.filter(s => s.state === 'Stored').length;
+      const loaded = state.spools.filter(s => s.state === 'Loaded').length;
+      const unlocated = state.spools.filter(s => s.state === 'Unlocated').length;
+      const storage = state.slots.filter(s => s.kind === 'storage');
+      const material = state.slots.filter(s => s.kind === 'material');
+      return `<div class="shell">
+        <div class="prototype-flag">Throwaway prototype · Variant C</div>
+        <header><div class="between"><div><span class="eyebrow">FilaManager / Live inventory</span><h2 style="margin:3px 0">Where everything is</h2></div><button class="icon-btn" data-action="reset" aria-label="Reset">↻</button></div>
+          <div class="status-band"><div class="metric"><strong>${stored}</strong><span>Stored</span></div><div class="metric"><strong>${loaded}</strong><span>Loaded</span></div><div class="metric"><strong>${unlocated}</strong><span>Unlocated</span></div></div>
+        </header>
+        ${scenarioLab()}
+        <main>
+          <div class="command-bar"><button class="btn primary" data-action="scan-menu">⌁ Scan</button><button class="btn ghost" data-action="nav-modal" data-view="search">⌕ Find</button><button class="btn ghost" data-action="start-register">＋ Add</button></div>
+          <div class="map-board">
+            <section class="map-column"><div class="between"><div><span class="eyebrow">Storage</span><h3>Physical shelves</h3></div><span class="pill">${storage.filter(s => !occupant(s.id)).length} empty</span></div>${storage.map(slotRow).join('')}</section>
+            <section class="map-column"><div class="between"><div><span class="eyebrow">Material unit</span><h3>AMS Lite</h3></div><span class="pill blue">${material.filter(s => occupant(s.id)).length}/${material.length} loaded</span></div>${material.map(s => slotRow(s, 'open-slot')).join('')}</section>
+            ${unlocated ? `<section class="map-column"><div class="between"><div><span class="eyebrow">Needs attention</span><h3>Unlocated</h3></div><span class="pill warn">${unlocated}</span></div>${state.spools.filter(s => s.state === 'Unlocated').map(spoolRow).join('')}</section>` : ''}
+          </div>
+          <div class="section"><div class="between section-title"><div><span class="eyebrow">Persistent feedback</span><h2 style="margin:2px 0">What changed</h2></div><button class="btn ghost" data-action="nav-modal" data-view="archive">Archive</button></div><div class="timeline">${state.history.slice(0,3).map((item, i) => `<div class="timeline-item"><strong>${i === 0 ? 'Now' : 'Earlier'}</strong><p>${esc(item)}</p></div>`).join('')}</div></div>
+        </main>
+        ${statePanel()}
+        ${overlays()}
+        ${switcher()}
+      </div>`;
+    }
+
+    function statePanel() {
+      return `<details class="state-panel" open>
+        <summary>Prototype state <span class="muted tiny">— visible after every action</span></summary>
+        <div class="state-lines">
+          <span>last: ${esc(state.lastEvent)}</span>
+          ${state.spools.map(item => `<span>${esc(item.label)} = ${item.state}, ${item.grams} g, ${esc(locationName(item))}</span>`).join('')}
+        </div>
+      </details>`;
+    }
+
+    function switcher() {
+      const prototypeMode = location.protocol === 'file:' || ['127.0.0.1', 'localhost'].includes(location.hostname);
+      if (!prototypeMode) return '';
+      return `<div class="prototype-switcher" role="group" aria-label="Prototype variant">
+        <button data-action="variant-prev" aria-label="Previous variant">←</button>
+        <div class="variant-label">${state.variant} · ${variantNames[state.variant]}</div>
+        <button data-action="variant-next" aria-label="Next variant">→</button>
+      </div>`;
+    }
+
+    function overlays() {
+      return `${state.modal ? modalMarkup(state.modal) : ''}${state.notice ? `<div class="toast" role="status">${esc(state.notice)}</div>` : ''}`;
+    }
+
+    function modalMarkup(modal) {
+      let body = '';
+      if (modal.kind === 'scan') {
+        body = `<span class="eyebrow">Simulated scan</span><h2>Hold near a storage-slot tag</h2><p>For this prototype, choose what the phone detects.</p>
+          <div class="button-stack">${state.slots.filter(s => s.kind === 'storage').map(s => `<button class="slot ${occupant(s.id) ? '' : 'empty'}" data-action="scan-slot" data-slot="${s.id}"><span><strong>${esc(s.name)}</strong><small>${occupant(s.id) ? 'Occupied tag' : 'Empty tag'}</small></span><span class="chevron">›</span></button>`).join('')}<button class="btn ghost" data-action="scenario" data-scenario="unknown">Read unknown tag</button></div>`;
+      } else if (modal.kind === 'checkout-destination') {
+        const item = spool(modal.spoolId);
+        body = `<span class="eyebrow">Check out · Step 1 of 2</span><h2>Where are you loading ${esc(item.label)}?</h2><p>Only unoccupied material slots are valid destinations.</p>
+          <div class="button-stack">${state.slots.filter(s => s.kind === 'material').map(s => occupant(s.id)
+            ? `<button class="slot" data-action="show-conflict" data-spool="${item.id}" data-slot="${s.id}"><span><strong>${esc(s.group)} · ${esc(s.name)}</strong><small>Occupied by ${esc(occupant(s.id).label)}</small></span><span class="pill warn">Blocked</span></button>`
+            : `<button class="slot empty" data-action="checkout-review" data-spool="${item.id}" data-slot="${s.id}"><span><strong>${esc(s.group)} · ${esc(s.name)}</strong><small>Empty</small></span><span class="chevron">›</span></button>`).join('')}</div>`;
+      } else if (modal.kind === 'checkout-review') {
+        const item = spool(modal.spoolId), destination = slot(modal.slotId);
+        body = `<span class="eyebrow">Check out · Final review</span><h2>Move this spool?</h2><div class="review"><div><span>Spool</span><strong>${esc(item.label)}</strong></div><div><span>From</span><strong>${esc(locationName(item))}</strong></div><div><span>To</span><strong>${esc(destination.group)} · ${esc(destination.name)}</strong></div><div><span>Quantity</span><strong>${item.grams} g</strong></div></div><p class="tiny">Nothing has changed yet.</p><div class="button-stack"><button class="btn primary" data-action="confirm-checkout" data-spool="${item.id}" data-slot="${destination.id}">Confirm check out</button><button class="btn ghost" data-action="close-modal">Cancel — change nothing</button></div>`;
+      } else if (modal.kind === 'checkin-spool') {
+        const loaded = state.spools.filter(s => s.state === 'Loaded');
+        body = `<span class="eyebrow">Check in · Step 1 of 3</span><h2>Which spool did you unload?</h2><p>The remaining quantity is required before leaving a material slot.</p>${loaded.length ? `<div class="button-stack">${loaded.map(item => `<button class="slot" data-action="checkin-form" data-spool="${item.id}" data-slot="${modal.slotId}"><span><strong>${esc(item.label)}</strong><small>${esc(locationName(item))} · recorded ${item.grams} g</small></span><span class="chevron">›</span></button>`).join('')}</div>` : '<div class="warning">No loaded spools are available in this test state.</div>'}`;
+      } else if (modal.kind === 'checkin-form') {
+        const item = spool(modal.spoolId), destination = slot(modal.slotId);
+        body = `<span class="eyebrow">Check in · Step 2 of 3</span><h2>Record what remains</h2><p>${esc(item.label)} will move from ${esc(locationName(item))} to ${esc(destination.name)}.</p><div class="field"><label for="remaining">Remaining quantity in grams</label><input id="remaining" type="number" min="0" step="1" value="${item.grams}"></div><button class="btn primary block" data-action="checkin-review" data-spool="${item.id}" data-slot="${destination.id}">Review check in</button>`;
+      } else if (modal.kind === 'checkin-review') {
+        const item = spool(modal.spoolId), destination = slot(modal.slotId);
+        body = `<span class="eyebrow">Check in · Final review</span><h2>Update location and quantity?</h2><div class="review"><div><span>Spool</span><strong>${esc(item.label)}</strong></div><div><span>From</span><strong>${esc(locationName(item))}</strong></div><div><span>To</span><strong>${esc(destination.group)} · ${esc(destination.name)}</strong></div><div><span>Remaining</span><strong>${modal.grams} g</strong></div></div><p class="tiny">Nothing has changed yet.</p><div class="button-stack"><button class="btn primary" data-action="confirm-checkin" data-spool="${item.id}" data-slot="${destination.id}" data-grams="${modal.grams}">Confirm check in</button><button class="btn ghost" data-action="close-modal">Cancel — change nothing</button></div>`;
+      } else if (modal.kind === 'register') {
+        body = `<span class="eyebrow">Register new spool · Step 1 of 2</span><h2>Describe the physical spool</h2>
+          <div class="field"><label for="new-label">Spool label (optional)</label><input id="new-label" value="Forest Green"></div>
+          <div class="field"><label for="new-material">Material type</label><input id="new-material" value="PLA"></div>
+          <div class="field"><label for="new-color">Representative color</label><input id="new-color" type="color" value="#2f7652"></div>
+          <div class="field"><label for="new-grams">Remaining quantity in grams</label><input id="new-grams" type="number" min="1" step="1" value="1000"></div>
+          <div class="field"><label for="new-location">Initial location</label><select id="new-location"><option value="">Leave Unlocated</option>${emptySlots('storage').map(s => `<option value="${s.id}" ${s.id === modal.slotId ? 'selected' : ''}>${esc(s.group)} · ${esc(s.name)}</option>`).join('')}${emptySlots('material').map(s => `<option value="${s.id}">${esc(s.group)} · ${esc(s.name)}</option>`).join('')}</select></div>
+          <button class="btn primary block" data-action="register-review">Review registration</button>`;
+      } else if (modal.kind === 'register-review') {
+        body = `<span class="eyebrow">Register new spool · Final review</span><h2>Add this spool?</h2><div class="review"><div><span>Identity</span><strong>${esc(modal.label || `${modal.material} spool`)}</strong></div><div><span>Material</span><strong>${esc(modal.material)}</strong></div><div><span>Quantity</span><strong>${modal.grams} g</strong></div><div><span>Location</span><strong>${modal.slotId ? esc(`${slot(modal.slotId).group} · ${slot(modal.slotId).name}`) : 'Unlocated'}</strong></div></div><p class="tiny">Nothing has changed yet.</p><div class="button-stack"><button class="btn primary" data-action="confirm-register">Confirm registration</button><button class="btn ghost" data-action="close-modal">Cancel — change nothing</button></div>`;
+      } else if (modal.kind === 'place') {
+        const candidates = state.spools.filter(s => s.state === 'Unlocated');
+        body = `<span class="eyebrow">Place spool · Step 1 of 2</span><h2>What is physically in ${esc(slot(modal.slotId).name)}?</h2>${candidates.length ? candidates.map(item => `<button class="spool" data-action="place-review" data-spool="${item.id}" data-slot="${modal.slotId}">${spoolRowInner(item)}</button>`).join('') : '<div class="warning">There are no Unlocated spools.</div>'}`;
+      } else if (modal.kind === 'place-review') {
+        const item = spool(modal.spoolId), destination = slot(modal.slotId);
+        body = `<span class="eyebrow">Place spool · Final review</span><h2>Record this assignment?</h2><div class="review"><div><span>Spool</span><strong>${esc(item.label)}</strong></div><div><span>From</span><strong>Unlocated</strong></div><div><span>To</span><strong>${esc(destination.group)} · ${esc(destination.name)}</strong></div></div><p class="tiny">Nothing has changed yet.</p><div class="button-stack"><button class="btn primary" data-action="confirm-place" data-spool="${item.id}" data-slot="${destination.id}">Confirm placement</button><button class="btn ghost" data-action="close-modal">Cancel — change nothing</button></div>`;
+      } else if (modal.kind === 'details') {
+        const item = spool(modal.spoolId);
+        body = `<span class="eyebrow">Filament spool</span><h2>${esc(item.label)}</h2><div class="review"><div><span>State</span><strong>${item.state}</strong></div><div><span>Location</span><strong>${esc(locationName(item))}</strong></div><div><span>Material</span><strong>${esc(item.material)}</strong></div><div><span>Remaining</span><strong>${item.grams} g</strong></div></div>${item.state === 'Consumed' || item.state === 'Retired' ? `<button class="btn primary block" data-action="restore-review" data-spool="${item.id}">Restore spool</button>` : `<div class="button-stack">${item.state === 'Stored' ? `<button class="btn primary" data-action="start-checkout" data-spool="${item.id}">Check out</button>` : ''}<button class="btn danger" data-action="retire-review" data-spool="${item.id}">Retire spool</button></div>`}`;
+      } else if (modal.kind === 'restore') {
+        const item = spool(modal.spoolId);
+        body = `<span class="eyebrow">Restore archived spool</span><h2>Return ${esc(item.label)} to active inventory?</h2><div class="warning">Restoration always makes the spool Unlocated. It never reclaims its former slot.</div>${item.state === 'Consumed' ? '<div class="field"><label for="restore-grams">New positive remaining quantity</label><input id="restore-grams" type="number" min="1" step="1" value="100"></div>' : ''}<div class="button-stack"><button class="btn primary" data-action="confirm-restore" data-spool="${item.id}">Confirm restore</button><button class="btn ghost" data-action="close-modal">Cancel</button></div>`;
+      } else if (modal.kind === 'retire') {
+        const item = spool(modal.spoolId);
+        body = `<span class="eyebrow">Archive spool</span><h2>Retire ${esc(item.label)}?</h2><div class="warning">This vacates its current slot and preserves ${item.grams} g as historical quantity.</div><div class="field"><label for="retire-reason">Reason</label><select id="retire-reason"><option>Damaged</option><option>Lost</option><option>Removed from inventory</option></select></div><div class="button-stack"><button class="btn danger" data-action="confirm-retire" data-spool="${item.id}">Confirm retirement</button><button class="btn ghost" data-action="close-modal">Cancel</button></div>`;
+      } else if (modal.kind === 'conflict') {
+        const moving = spool(modal.spoolId), destination = slot(modal.slotId), held = occupant(modal.slotId);
+        body = `<span class="eyebrow">Occupied destination</span><h2>${esc(destination.name)} already has a recorded occupant</h2><div class="review"><div><span>Moving spool</span><strong>${esc(moving.label)}</strong></div><div><span>Recorded occupant</span><strong>${esc(held?.label || 'None')}</strong></div></div><div class="warning">Normal movement is blocked. If ${esc(moving.label)} is physically here, a correction will make ${esc(held?.label || 'the recorded occupant')} Unlocated. No implicit swap occurs.</div><div class="button-stack"><button class="btn danger" data-action="confirm-correction" data-spool="${moving.id}" data-slot="${destination.id}">Confirm assignment correction</button><button class="btn ghost" data-action="close-modal">Cancel — change nothing</button></div>`;
+      } else if (modal.kind === 'search') {
+        body = `<span class="eyebrow">Manual lookup</span><h2>Find any active spool</h2>${inventoryList(true)}`;
+      } else if (modal.kind === 'archive') {
+        body = archiveList();
+      } else if (modal.kind === 'error') {
+        body = `<span class="pill warn">No inventory change</span><h2 style="margin-top:12px">${esc(modal.title)}</h2><p>${esc(modal.message)}</p><div class="card soft"><strong>Recovery</strong><p style="margin:6px 0 0">${esc(modal.recovery)}</p></div><button class="btn primary block" data-action="close-modal">Got it</button>`;
+      }
+      return `<div class="sheet-backdrop" role="presentation"><section class="sheet" role="dialog" aria-modal="true"><div class="sheet-handle"></div><div class="between" style="align-items:start"><div style="flex:1">${body}</div><button class="icon-btn" data-action="close-modal" aria-label="Close">×</button></div></section></div>`;
+    }
+
+    function spoolRowInner(item) {
+      return `<span class="swatch" style="--swatch:${item.color}"></span><span><strong>${esc(item.label)}</strong><span class="meta">${esc(item.material)} · ${esc(item.state)}</span></span><span class="qty">${item.grams} g</span>`;
+    }
+
+    function render() {
+      const root = $('#app');
+      root.innerHTML = state.variant === 'A' ? renderA() : state.variant === 'B' ? renderB() : renderC();
+      if (state.notice) window.setTimeout(() => { state.notice = null; const toast = $('.toast'); if (toast) toast.remove(); }, 2600);
+    }
+
+    function setVariant(next) {
+      state.variant = next;
+      const url = new URL(location.href);
+      url.searchParams.set('variant', next);
+      history.replaceState({}, '', url);
+      state.lastEvent = `Switched to Variant ${next} (${variantNames[next]}) — inventory unchanged.`;
+      render();
+    }
+
+    function cycleVariant(direction) {
+      const index = variants.indexOf(state.variant);
+      setVariant(variants[(index + direction + variants.length) % variants.length]);
+    }
+
+    function scanSlot(slotId) {
+      const item = slot(slotId);
+      state.modal = null;
+      state.scannedSlotId = slotId;
+      state.view = 'scan';
+      state.lastEvent = `Scanned ${item.name} — opened read-only context; inventory unchanged.`;
+      render();
+    }
+
+    function scenario(name) {
+      if (name === 'occupied') {
+        const occupiedStorage = state.slots.find(item => item.kind === 'storage' && occupant(item.id));
+        if (occupiedStorage) return scanSlot(occupiedStorage.id);
+        return scenarioError('No occupied storage slot', 'Reset the prototype to restore the starting scenario.');
+      }
+      if (name === 'empty') {
+        const emptyStorage = state.slots.find(item => item.kind === 'storage' && !occupant(item.id));
+        if (emptyStorage) return scanSlot(emptyStorage.id);
+        return scenarioError('No empty storage slot', 'Move or retire a Stored spool, or reset the prototype.');
+      }
+      if (name === 'unknown') state.modal = { kind: 'error', title: 'Unknown tag', message: 'This tag does not contain a valid FilaManager storage-slot reference.', recovery: 'Close this message, browse Places manually, or register the tag to an existing storage slot in the eventual app.' };
+      if (name === 'conflict') {
+        const destination = state.slots.find(item => occupant(item.id));
+        const held = destination ? occupant(destination.id) : null;
+        const moving = state.spools.find(item => item.state === 'Unlocated') || activeSpools().find(item => item.id !== held?.id);
+        if (!destination || !moving) return scenarioError('Conflict scenario unavailable', 'Reset the prototype to restore two eligible spools and an occupied destination.');
+        state.modal = { kind: 'conflict', spoolId: moving.id, slotId: destination.id };
+      }
+      if (name === 'nfc-off') state.modal = { kind: 'error', title: 'NFC is unavailable', message: 'The phone cannot start a scan right now. Inventory remains unchanged.', recovery: 'Enable NFC in system settings or use manual Spools and Places navigation.' };
+      if (name === 'interrupted') {
+        state.modal = { kind: 'error', title: 'Action interrupted', message: 'The app closed before final confirmation. No partial movement or reservation was saved.', recovery: 'Open the spool or slot again and restart the action.' };
+      }
+      state.lastEvent = `${name.replace('-', ' ')} scenario opened — inventory unchanged.`;
+      render();
+    }
+
+    document.addEventListener('click', event => {
+      const target = event.target.closest('[data-action]');
+      if (!target) return;
+      const action = target.dataset.action;
+      if (action === 'variant-prev') return cycleVariant(-1);
+      if (action === 'variant-next') return cycleVariant(1);
+      if (action === 'nav') { state.view = target.dataset.view; state.scannedSlotId = null; return render(); }
+      if (action === 'nav-modal') { state.modal = { kind: target.dataset.view }; return render(); }
+      if (action === 'scan-menu') { state.modal = { kind: 'scan' }; state.lastEvent = 'Scan session opened — inventory unchanged.'; return render(); }
+      if (action === 'scan-slot') return scanSlot(target.dataset.slot);
+      if (action === 'open-slot') {
+        const held = occupant(target.dataset.slot);
+        if (held) state.modal = { kind: 'details', spoolId: held.id };
+        else state.modal = { kind: 'error', title: 'Empty material slot', message: `${slot(target.dataset.slot).group} · ${slot(target.dataset.slot).name} is available.`, recovery: 'Check out a Stored spool and choose this material slot as its destination.' };
+        return render();
+      }
+      if (action === 'scenario') return scenario(target.dataset.scenario);
+      if (action === 'reset') { resetPrototype(); return render(); }
+      if (action === 'close-modal') { state.modal = null; state.lastEvent = 'Action cancelled — inventory unchanged.'; return render(); }
+      if (action === 'details') { state.modal = { kind: 'details', spoolId: target.dataset.spool }; return render(); }
+      if (action === 'start-checkout') { state.modal = { kind: 'checkout-destination', spoolId: target.dataset.spool }; state.lastEvent = 'Check-out draft opened — inventory unchanged.'; return render(); }
+      if (action === 'checkout-review') { state.modal = { kind: 'checkout-review', spoolId: target.dataset.spool, slotId: target.dataset.slot }; return render(); }
+      if (action === 'show-conflict') { state.modal = { kind: 'conflict', spoolId: target.dataset.spool, slotId: target.dataset.slot }; return render(); }
+      if (action === 'confirm-checkout') {
+        const item = spool(target.dataset.spool), destination = slot(target.dataset.slot), source = locationName(item);
+        item.state = 'Loaded'; item.locationId = destination.id; state.modal = null;
+        record(`${item.label} checked out: ${source} → ${destination.group} · ${destination.name}.`);
+        return render();
+      }
+      if (action === 'start-checkin') { state.modal = { kind: 'checkin-spool', slotId: target.dataset.slot || emptySlots('storage')[0]?.id }; state.lastEvent = 'Check-in draft opened — inventory unchanged.'; return render(); }
+      if (action === 'checkin-form') { state.modal = { kind: 'checkin-form', spoolId: target.dataset.spool, slotId: target.dataset.slot }; return render(); }
+      if (action === 'checkin-review') {
+        const grams = Number($('#remaining')?.value);
+        if (!Number.isInteger(grams) || grams <= 0) {
+          state.modal = { kind: 'error', title: grams === 0 ? 'Consumption needs confirmation' : 'Enter a valid quantity', message: grams === 0 ? 'Zero grams cannot remain an active spool. Consuming the spool is a separate explicit action.' : 'Remaining quantity must be a positive whole number.', recovery: 'Return to the spool and enter a positive whole number, or choose Consume from its details.' };
+        } else state.modal = { kind: 'checkin-review', spoolId: target.dataset.spool, slotId: target.dataset.slot, grams };
+        return render();
+      }
+      if (action === 'confirm-checkin') {
+        const item = spool(target.dataset.spool), destination = slot(target.dataset.slot), source = locationName(item);
+        item.state = 'Stored'; item.locationId = destination.id; item.grams = Number(target.dataset.grams); state.modal = null;
+        record(`${item.label} checked in: ${source} → ${destination.group} · ${destination.name}, ${item.grams} g.`);
+        return render();
+      }
+      if (action === 'start-register') { state.modal = { kind: 'register', slotId: target.dataset.slot || null }; state.lastEvent = 'Registration draft opened — inventory unchanged.'; return render(); }
+      if (action === 'register-review') {
+        const grams = Number($('#new-grams')?.value);
+        if (!Number.isInteger(grams) || grams <= 0) {
+          state.modal = { kind: 'error', title: 'Positive quantity required', message: 'An active filament spool cannot be registered with zero or fractional grams.', recovery: 'Enter a positive whole number and review the registration again.' };
+        } else state.modal = { kind: 'register-review', label: $('#new-label')?.value.trim(), material: $('#new-material')?.value.trim() || 'Custom', color: $('#new-color')?.value || '#777777', grams, slotId: $('#new-location')?.value || null };
+        return render();
+      }
+      if (action === 'confirm-register') {
+        const data = state.modal;
+        const id = `p${Date.now()}`;
+        const destination = data.slotId ? slot(data.slotId) : null;
+        state.spools.push({ id, label: data.label || `${data.material} spool`, material: data.material, color: data.color, grams: data.grams, state: destination ? (destination.kind === 'storage' ? 'Stored' : 'Loaded') : 'Unlocated', locationId: data.slotId });
+        state.modal = null;
+        record(`${data.label || `${data.material} spool`} registered ${destination ? `at ${destination.group} · ${destination.name}` : 'as Unlocated'}.`);
+        return render();
+      }
+      if (action === 'start-place') { state.modal = { kind: 'place', slotId: target.dataset.slot }; state.lastEvent = 'Placement draft opened — inventory unchanged.'; return render(); }
+      if (action === 'place-review') { state.modal = { kind: 'place-review', spoolId: target.dataset.spool, slotId: target.dataset.slot }; return render(); }
+      if (action === 'confirm-place') {
+        const item = spool(target.dataset.spool), destination = slot(target.dataset.slot);
+        item.state = destination.kind === 'storage' ? 'Stored' : 'Loaded'; item.locationId = destination.id; state.modal = null;
+        record(`${item.label} placed at ${destination.group} · ${destination.name}.`);
+        return render();
+      }
+      if (action === 'restore-review') { state.modal = { kind: 'restore', spoolId: target.dataset.spool }; return render(); }
+      if (action === 'confirm-restore') {
+        const item = spool(target.dataset.spool);
+        if (item.state === 'Consumed') {
+          const grams = Number($('#restore-grams')?.value);
+          if (!Number.isInteger(grams) || grams <= 0) return scenarioError('Positive quantity required', 'A restored Consumed spool needs a positive whole-gram quantity.');
+          item.grams = grams;
+        }
+        item.state = 'Unlocated'; item.locationId = null; state.modal = null;
+        record(`${item.label} restored as Unlocated; no former slot was reclaimed.`);
+        return render();
+      }
+      if (action === 'retire-review') { state.modal = { kind: 'retire', spoolId: target.dataset.spool }; return render(); }
+      if (action === 'confirm-retire') {
+        const item = spool(target.dataset.spool), prior = locationName(item);
+        item.state = 'Retired'; item.locationId = null; state.modal = null;
+        record(`${item.label} retired from ${prior}; its slot was vacated.`);
+        return render();
+      }
+      if (action === 'confirm-correction') {
+        const moving = spool(target.dataset.spool), destination = slot(target.dataset.slot), displaced = occupant(destination.id);
+        if (displaced && displaced.id !== moving.id) { displaced.state = 'Unlocated'; displaced.locationId = null; }
+        moving.locationId = destination.id; moving.state = destination.kind === 'storage' ? 'Stored' : 'Loaded'; state.modal = null;
+        record(`${moving.label} corrected to ${destination.name}; ${displaced?.label || 'no spool'} became Unlocated.`);
+        return render();
+      }
+    });
+
+    function scenarioError(title, message) {
+      state.modal = { kind: 'error', title, message, recovery: 'Correct the value and try again; inventory remains unchanged.' };
+      state.lastEvent = `${title} — inventory unchanged.`;
+      render();
+    }
+
+    document.addEventListener('input', event => {
+      if (!event.target.matches('[data-filter]')) return;
+      const term = event.target.value.trim().toLowerCase();
+      document.querySelectorAll('.filterable').forEach(item => { item.hidden = !item.dataset.filterText.includes(term); });
+    });
+
+    document.addEventListener('keydown', event => {
+      if (!['ArrowLeft', 'ArrowRight'].includes(event.key)) return;
+      if (event.target.matches('input, textarea, select, [contenteditable]')) return;
+      cycleVariant(event.key === 'ArrowRight' ? 1 : -1);
+    });
+
+    render();
+  </script>
+</body>
+</html>
