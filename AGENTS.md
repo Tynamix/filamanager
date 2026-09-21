@@ -1,5 +1,9 @@
 ## Agent skills
 
+### Development workflow
+
+Every implementation change follows the TDD, review, and delivery workflow in `docs/agents/development-workflow.md`.
+
 ### Issue tracker
 
 Issues are tracked as local Markdown files under `.scratch/`. See `docs/agents/issue-tracker.md`.
