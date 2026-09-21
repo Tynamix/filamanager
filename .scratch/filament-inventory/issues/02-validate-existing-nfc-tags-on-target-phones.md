@@ -12,9 +12,9 @@ The spike must identify the exact tag model and NDEF state; write an application
 
 ## Comments
 
-- Throwaway hardware spike and guided test protocol prepared at [NFC tag spike](../prototypes/nfc-tag-spike/README.md). Awaiting the Pixel 9, iPhone 17e, and physical-tag results before resolution.
+- Throwaway hardware spike and guided test protocol captured on the separate prototype branch at [NFC tag spike](https://github.com/Tynamix/filamanager/tree/e23c6e1fa5e0da802597ee80891071471da684c6/.scratch/filament-inventory/prototypes/nfc-tag-spike). Awaiting the Pixel 9, iPhone 17e, and physical-tag results before resolution.
 - Flutter 3.47.5, Android SDK 36.1, Xcode 27.0, and CocoaPods 1.17.0 are configured. The spike passes `flutter analyze`, builds and launches on Android, and completes an unsigned physical-device iOS build. No physical target phone is connected yet.
-- Pixel 9 inspection captured in [NFC tag spike results](../prototypes/nfc-tag-spike/test-results.md): Android 17 reports a writable 492-byte Type 2 tag whose `GET_VERSION` is NTAG215-compatible. Existing non-FilaManager payloads are redacted; write and reliability tests remain pending.
+- Pixel 9 inspection captured in [NFC tag spike results](https://github.com/Tynamix/filamanager/blob/e23c6e1fa5e0da802597ee80891071471da684c6/.scratch/filament-inventory/prototypes/nfc-tag-spike/test-results.md): Android 17 reports a writable 492-byte Type 2 tag whose `GET_VERSION` is NTAG215-compatible. Existing non-FilaManager payloads are redacted; write and reliability tests remain pending.
 
 ## Answer
 
