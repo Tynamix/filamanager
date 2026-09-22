@@ -47,15 +47,15 @@ void appSmokeSuite() {
     expect(find.text('Archive'), findsOneWidget);
 
     await tester.tap(find.text('Spools'));
-    await tester.pumpAndSettle();
+    await _pumpInteraction(tester);
     expect(find.text('No active filament spools yet'), findsOneWidget);
 
     await tester.tap(find.text('Places'));
-    await tester.pumpAndSettle();
+    await _pumpInteraction(tester);
     expect(find.text('No storage slots or material units yet'), findsOneWidget);
 
     await tester.tap(find.text('Archive'));
-    await tester.pumpAndSettle();
+    await _pumpInteraction(tester);
     expect(find.text('No consumed or retired filament spools'), findsOneWidget);
   });
 
@@ -95,11 +95,11 @@ void appSmokeSuite() {
       incomingLinkService,
     );
     await tester.tap(find.text('Places'));
-    await tester.pumpAndSettle();
+    await _pumpInteraction(tester);
     expect(find.text('No storage slots or material units yet'), findsOneWidget);
 
     await tester.pumpWidget(const SizedBox.shrink());
-    await tester.pumpAndSettle();
+    await _pumpInteraction(tester);
     await _launchApp(
       tester,
       temporaryDirectory,
@@ -120,10 +120,10 @@ void appSmokeSuite() {
       incomingLinkService,
     );
     await tester.tap(find.text('Spools'));
-    await tester.pumpAndSettle();
+    await _pumpInteraction(tester);
 
     await tester.binding.handlePopRoute();
-    await tester.pumpAndSettle();
+    await _pumpInteraction(tester);
 
     expect(find.text('Scan a storage-slot tag'), findsOneWidget);
   });
@@ -148,7 +148,7 @@ void appSmokeSuite() {
     }
 
     final semantics = tester.ensureSemantics();
-    expect(find.bySemanticsLabel('Scan storage-slot tag'), findsOneWidget);
+    expect(find.bySemanticsLabel('Scan a storage-slot tag'), findsOneWidget);
     semantics.dispose();
   });
 }
@@ -171,7 +171,12 @@ Future<void> _launchApp(
   );
 
   await tester.pumpWidget(FilaManagerApp(dependencies: dependencies!));
-  await tester.pumpAndSettle();
+  await _pumpInteraction(tester);
+}
+
+Future<void> _pumpInteraction(WidgetTester tester) async {
+  await tester.pump();
+  await tester.pump(const Duration(milliseconds: 300));
 }
 
 final class FakeNfcService implements NfcService {

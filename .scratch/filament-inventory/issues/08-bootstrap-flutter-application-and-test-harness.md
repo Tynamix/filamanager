@@ -20,3 +20,4 @@
 - Implemented on 2026-09-22 with Android application ID `de.vibesolutions.filamanager` and target SDK 36.
 - The shared smoke suite passed locally and through `integration_test` on the physical Pixel 9. The production entry point also built, installed, and launched on that device.
 - Production NFC reading/writing, App Link routing, storage-slot-reference validation, and read-only storage-slot context remain ticket 09. Migration and unreadable-store recovery remain ticket 25.
+- The production shell follows the visual language of Variant A on branch `prototype/scan-first-experience`; `docs/agents/ui.md` makes that reference normative for later UI slices.
