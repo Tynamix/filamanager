@@ -28,9 +28,12 @@ environment:
 # the latest version available on pub.dev. To see which dependencies have newer
 # versions available, run `flutter pub outdated`.
 dependencies:
+  app_links: 7.2.1
   flutter:
     sdk: flutter
 
+  nfc_manager: 4.2.1
+  nfc_manager_ndef: 1.1.0
   path_provider: ^2.1.5
 
 dev_dependencies:

@@ -1,0 +1,12 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "de.vibesolutions.filamanager",
+      "sha256_cert_fingerprints": [
+        "0B:E1:82:51:F1:B4:4D:E3:50:86:C8:76:D3:02:A5:7B:49:9B:F7:A5:4A:B7:35:F4:DB:D0:5E:A4:D0:61:AB:6E"
+      ]
+    }
+  }
+]
