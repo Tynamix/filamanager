@@ -26,7 +26,7 @@ Use a dedicated empty storage slot for this gate. Record its reference only as a
 | Canonical URI write, independent read-back, one URI record | Passed. The production app reported “Tag registered”; Android's subsequent NFC dispatch decoded exactly one well-known URI record matching the gate slot's canonical reference. The read-only inspection app also reported one cached URI record with a 57-byte record payload. Identifier and prior tag contents are omitted. |
 | Foreground scan opens the same read-only storage-slot context | Passed once with the production adapter. The UI displayed “NFC Gate” and “Empty”; the reader session closed after discovery. |
 | Physical operating-system App Link scan opens that context | Android 17 logged repeated physical tag dispatches as a matched web link for FilaManager; the app displayed the gate slot context. A clean background/cold-state matrix remains pending. |
-| Inventory document unchanged after NFC operations | Passed for the write and first foreground read. The app-local inventory SHA-256 stayed `f34e84038b87921bdc6ca0856340f7911ada89db44e9a767a58e8b953045016e`. |
+| Inventory document unchanged after NFC operations | Passed for the write, first foreground read, and the later repeated-scan attempt. The app-local inventory SHA-256 stayed `f34e84038b87921bdc6ca0856340f7911ada89db44e9a767a58e8b953045016e`. Failure cases remain untested. |
 
 The physical metadata came from the existing read-only NFC spike app. The production adapter checks NDEF support, writability, and capacity while writing, but it does not expose the exact tag type or those values in a retained diagnostic. That part of ticket 10 remains open.
 
@@ -49,7 +49,25 @@ For each attempt, end the prior NFC session or move the phone away until discove
 
 **Pass target:** 10/10 successful; normally within two seconds and none over five seconds.
 
-A continuous attempt was made on the plastic bin. Four distinct system-dispatched tag detections were retained in the redacted Android log from `23:22:53` through `23:23:05`, in addition to the earlier successful foreground scan. The user reported that read and write appeared to work. The run did not establish ten controlled fresh attempts or presentation-to-visible-context times, so it cannot be counted as a pass. The temporary screen recording was deleted after the run; no unredacted tag payload or hardware ID is retained here.
+A continuous attempt was made on the plastic bin. Four distinct system-dispatched tag detections appear in the redacted diagnostic excerpt below from `23:22:53` through `23:23:05`, in addition to the earlier successful foreground scan. The user reported that read and write appeared to work. The run did not establish ten controlled fresh attempts or presentation-to-visible-context times, so it cannot be counted as a pass. The temporary screen recording was deleted after the run; no unredacted tag payload or hardware ID is retained here.
+
+### Redacted Android diagnostic excerpt
+
+Captured with `adb logcat -d -v time -s NfcService NfcDispatcher` on 2026-09-25. Payloads and hardware IDs are omitted. Each dispatch below reported the `NfcA`, `MifareUltralight`, and `Ndef` technologies, one well-known URI record, and “matched Web link - prompting user.” The payload bytes were decoded in memory and compared to the gate slot's canonical reference; the two checked dispatch records matched exactly.
+
+| Local time | System event | Observation |
+| --- | --- | --- |
+| 23:13:39.739 | `NfcService: Tag detected` | Production write session held reader mode. |
+| 23:13:39.962 | `NfcService: setReaderMode flags: 0` | Production write session ended. |
+| 23:13:40.120 | `NfcDispatcher: dispatchTag` | Independent OS read after the write; canonical URI record. |
+| 23:16:53.126 | `NfcService: Tag detected` | Explicit foreground read. |
+| 23:16:53.198 | `NfcService: setReaderMode flags: 0` | Foreground read session ended. |
+| 23:22:53.162–23:22:53.213 | Detection, dispatch, matched web link | Plastic-bin repeat attempt. |
+| 23:23:02.445–23:23:02.546 | Detection, dispatch, matched web link | Plastic-bin repeat attempt. |
+| 23:23:03.704–23:23:03.747 | Detection, dispatch, matched web link | Plastic-bin repeat attempt. |
+| 23:23:04.968–23:23:05.023 | Detection, dispatch, matched web link | Plastic-bin repeat attempt. |
+
+These timestamps measure detection-to-dispatch, not presentation-to-visible-context. They therefore do not establish the two-second or five-second user-visible targets.
 
 ## Failure and recovery matrix
 
