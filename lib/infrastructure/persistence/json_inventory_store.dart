@@ -65,16 +65,6 @@ final class JsonInventoryStore implements InventoryStore {
   }
 
   Future<void> _createEmptyStore() async {
-    await file.parent.create(recursive: true);
-    final temporaryFile = File('${file.path}.tmp');
-    final inventory = const InventoryDocument(
-      schemaVersion: currentSchemaVersion,
-    );
-    final contents = jsonEncode(<String, Object>{
-      'schemaVersion': inventory.schemaVersion,
-      'storageSlots': <Object>[],
-    });
-    await temporaryFile.writeAsString(contents, flush: true);
-    await temporaryFile.rename(file.path);
+    await save(const InventoryDocument(schemaVersion: currentSchemaVersion));
   }
 }

@@ -45,6 +45,14 @@ final class NfcContentRead extends NfcEvent {
   final String content;
 }
 
+enum NfcTagFailureKind { incompatible, unformatted }
+
+final class NfcTagRejected extends NfcEvent {
+  const NfcTagRejected(this.kind);
+
+  final NfcTagFailureKind kind;
+}
+
 final class NfcScanUnavailable extends NfcEvent {
   const NfcScanUnavailable(this.availability);
 

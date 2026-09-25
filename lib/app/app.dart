@@ -48,28 +48,40 @@ final class _InventoryShellState extends State<_InventoryShell> {
           _openStorageSlotReference(
             event.payload,
             receivedMessage: 'NFC input received',
+            invalidReferenceTitle: 'Unknown tag',
           );
         case NfcContentRead():
           _openStorageSlotReference(
             Uri.tryParse(event.content),
             receivedMessage: 'NFC input received',
+            invalidReferenceTitle: 'Unknown tag',
+          );
+        case NfcTagRejected():
+          _showScanFailure(
+            event.kind == NfcTagFailureKind.unformatted
+                ? 'Tag is not NDEF-formatted'
+                : 'Incompatible NFC tag',
           );
         case NfcScanUnavailable():
-          _showExternalInput(
+          _showInventoryUnchangedResult(
             event.availability == NfcAvailability.disabled
                 ? 'NFC is disabled'
                 : 'NFC is unavailable',
           );
         case NfcScanCancelled():
-          _showExternalInput('Scan cancelled');
+          _showInventoryUnchangedResult('Scan cancelled');
         case NfcScanFailed():
-          _showExternalInput('NFC scan failed');
+          _showInventoryUnchangedResult('NFC scan failed');
       }
     });
     _incomingLinks = widget.dependencies.incomingLinkService.links.listen((
       uri,
     ) {
-      _openStorageSlotReference(uri, receivedMessage: 'Incoming link received');
+      _openStorageSlotReference(
+        uri,
+        receivedMessage: 'Incoming link received',
+        invalidReferenceTitle: 'Invalid storage-slot link',
+      );
     });
     final initialIncomingLink = widget.dependencies.initialIncomingLink;
     if (initialIncomingLink != null) {
@@ -78,6 +90,7 @@ final class _InventoryShellState extends State<_InventoryShell> {
           _openStorageSlotReference(
             initialIncomingLink,
             receivedMessage: 'Incoming link received',
+            invalidReferenceTitle: 'Invalid storage-slot link',
           );
         }
       });
@@ -245,7 +258,11 @@ final class _InventoryShellState extends State<_InventoryShell> {
     });
   }
 
-  void _openStorageSlotReference(Uri? uri, {required String receivedMessage}) {
+  void _openStorageSlotReference(
+    Uri? uri, {
+    required String receivedMessage,
+    required String invalidReferenceTitle,
+  }) {
     final storageSlotId = uri == null ? null : StorageSlotReference.parse(uri);
     StorageSlot? storageSlot;
     if (storageSlotId != null) {
@@ -261,14 +278,23 @@ final class _InventoryShellState extends State<_InventoryShell> {
       _selectedIndex = 2;
       _selectedStorageSlot = storageSlot;
       _referenceError = storageSlotId == null
-          ? 'Unknown tag'
+          ? invalidReferenceTitle
           : storageSlot == null
           ? 'Unknown storage slot'
           : null;
     });
     if (_referenceError != null) {
-      _showExternalInput(receivedMessage);
+      _showInventoryUnchangedResult(receivedMessage);
     }
+  }
+
+  void _showScanFailure(String title) {
+    setState(() {
+      _selectedIndex = 2;
+      _selectedStorageSlot = null;
+      _referenceError = title;
+    });
+    _showInventoryUnchangedResult(title);
   }
 
   Future<void> _registerTag(StorageSlot storageSlot) async {
@@ -277,7 +303,7 @@ final class _InventoryShellState extends State<_InventoryShell> {
       return;
     }
     if (availability != NfcAvailability.available) {
-      _showExternalInput(
+      _showInventoryUnchangedResult(
         availability == NfcAvailability.disabled
             ? 'NFC is disabled'
             : 'NFC is unavailable',
@@ -285,7 +311,7 @@ final class _InventoryShellState extends State<_InventoryShell> {
       return;
     }
 
-    final reference = StorageSlotReference.forStorageSlotId(storageSlot.id);
+    final reference = StorageSlotReference.forStorageSlot(storageSlot.id);
     final confirmed = await showModalBottomSheet<bool>(
       context: context,
       isScrollControlled: true,
@@ -309,7 +335,7 @@ final class _InventoryShellState extends State<_InventoryShell> {
     if (!mounted) {
       return;
     }
-    _showExternalInput(
+    _showInventoryUnchangedResult(
       _writeResultMessage(
         result ?? const NfcWriteFailed(NfcWriteFailureKind.unexpected),
       ),
@@ -334,7 +360,7 @@ final class _InventoryShellState extends State<_InventoryShell> {
     };
   }
 
-  void _showExternalInput(String message) {
+  void _showInventoryUnchangedResult(String message) {
     if (!mounted) {
       return;
     }
@@ -635,6 +661,7 @@ final class _CreateStorageSlotSheet extends StatefulWidget {
 final class _CreateStorageSlotSheetState
     extends State<_CreateStorageSlotSheet> {
   final _nameController = TextEditingController();
+  var _reviewing = false;
 
   @override
   void dispose() {
@@ -644,6 +671,7 @@ final class _CreateStorageSlotSheetState
 
   @override
   Widget build(BuildContext context) {
+    final name = _nameController.text.trim();
     return SafeArea(
       child: Padding(
         padding: EdgeInsets.fromLTRB(
@@ -655,32 +683,71 @@ final class _CreateStorageSlotSheetState
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            const _Eyebrow('New place'),
-            const SizedBox(height: 6),
-            Text(
-              'Create storage slot',
-              style: Theme.of(context).textTheme.headlineMedium,
-            ),
-            const SizedBox(height: 18),
-            TextField(
-              controller: _nameController,
-              autofocus: true,
-              decoration: const InputDecoration(labelText: 'Storage-slot name'),
-              onChanged: (_) => setState(() {}),
-              onSubmitted: _nameController.text.trim().isEmpty
-                  ? null
-                  : (_) => _submit(),
-            ),
-            const SizedBox(height: 18),
-            FilledButton(
-              onPressed: _nameController.text.trim().isEmpty ? null : _submit,
-              child: const Text('Create storage slot'),
-            ),
-          ],
+          children: _reviewing
+              ? [
+                  const _Eyebrow('Review storage slot'),
+                  const SizedBox(height: 6),
+                  Text(
+                    'Create this storage slot?',
+                    style: Theme.of(context).textTheme.headlineMedium,
+                  ),
+                  const SizedBox(height: 18),
+                  _PrototypeCard(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const _Eyebrow('Storage-slot name'),
+                        const SizedBox(height: 4),
+                        Text(
+                          name,
+                          style: Theme.of(context).textTheme.titleMedium,
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  const Text('No inventory changes have been made.'),
+                  const SizedBox(height: 18),
+                  FilledButton(
+                    onPressed: _submit,
+                    child: const Text('Create storage slot'),
+                  ),
+                  TextButton(
+                    onPressed: () => setState(() => _reviewing = false),
+                    child: const Text('Back to edit'),
+                  ),
+                ]
+              : [
+                  const _Eyebrow('New place'),
+                  const SizedBox(height: 6),
+                  Text(
+                    'Create storage slot',
+                    style: Theme.of(context).textTheme.headlineMedium,
+                  ),
+                  const SizedBox(height: 18),
+                  TextField(
+                    controller: _nameController,
+                    autofocus: true,
+                    decoration: const InputDecoration(
+                      labelText: 'Storage-slot name',
+                    ),
+                    onChanged: (_) => setState(() {}),
+                    onSubmitted: name.isEmpty ? null : (_) => _review(),
+                  ),
+                  const SizedBox(height: 18),
+                  OutlinedButton(
+                    onPressed: name.isEmpty ? null : _review,
+                    child: const Text('Review storage slot'),
+                  ),
+                ],
         ),
       ),
     );
+  }
+
+  void _review() {
+    FocusScope.of(context).unfocus();
+    setState(() => _reviewing = true);
   }
 
   void _submit() {

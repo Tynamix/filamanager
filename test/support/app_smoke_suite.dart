@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:filamanager/app/app.dart';
 import 'package:filamanager/app/app_dependencies.dart';
 import 'package:filamanager/infrastructure/persistence/json_inventory_store.dart';
+import 'package:filamanager/inventory/storage_slot_id.dart';
 import 'package:filamanager/persistence/inventory_store.dart';
 import 'package:filamanager/services/incoming_link_service.dart';
 import 'package:filamanager/services/nfc_service.dart';
@@ -98,6 +99,26 @@ void appSmokeSuite({bool useProductionStore = false}) {
     expect(find.text('No inventory changes were made.'), findsWidgets);
   });
 
+  testWidgets('does not classify a malformed incoming link as a tag', (
+    tester,
+  ) async {
+    await _launchApp(
+      tester,
+      inventoryStoreFactory,
+      nfcService,
+      incomingLinkService,
+    );
+
+    incomingLinkService.emit(
+      Uri.parse('https://example.invalid/s#v1.$_storageSlotId'),
+    );
+    await _pumpInteraction(tester);
+
+    expect(find.text('Invalid storage-slot link'), findsOneWidget);
+    expect(find.text('Unknown tag'), findsNothing);
+    expect(find.text('No inventory changes were made.'), findsWidgets);
+  });
+
   testWidgets('reopens the same production-format store after restart', (
     tester,
   ) async {
@@ -135,25 +156,7 @@ void appSmokeSuite({bool useProductionStore = false}) {
 
     await tester.tap(find.text('Places'));
     await _pumpInteraction(tester);
-    await tester.tap(find.text('Add storage slot'));
-    await _pumpInteraction(tester);
-    await tester.enterText(
-      find.bySemanticsLabel('Storage-slot name'),
-      'Shelf A · 01',
-    );
-    await tester.pump();
-    final createButton = find.widgetWithText(
-      FilledButton,
-      'Create storage slot',
-    );
-    expect(tester.widget<FilledButton>(createButton).onPressed, isNotNull);
-    await tester.runAsync(() => tester.tap(createButton));
-    await tester.pumpAndSettle();
-    expect(find.text('NEW PLACE'), findsNothing);
-    await tester.runAsync(
-      () => Future<void>.delayed(const Duration(milliseconds: 50)),
-    );
-    await _pumpInteraction(tester);
+    await _createStorageSlotThroughUi(tester, name: 'Shelf A · 01');
 
     expect(find.text('Shelf A · 01'), findsOneWidget);
     expect(find.text('READ-ONLY STORAGE-SLOT CONTEXT'), findsOneWidget);
@@ -187,18 +190,7 @@ void appSmokeSuite({bool useProductionStore = false}) {
     );
     await tester.tap(find.text('Places'));
     await _pumpInteraction(tester);
-    await tester.tap(find.text('Add storage slot'));
-    await _pumpInteraction(tester);
-    await tester.enterText(
-      find.bySemanticsLabel('Storage-slot name'),
-      'Shelf A · 01',
-    );
-    await tester.pump();
-    await tester.runAsync(
-      () =>
-          tester.tap(find.widgetWithText(FilledButton, 'Create storage slot')),
-    );
-    await tester.pumpAndSettle();
+    await _createStorageSlotThroughUi(tester, name: 'Shelf A · 01');
 
     await tester.binding.handlePopRoute();
     await _pumpInteraction(tester);
@@ -247,6 +239,16 @@ void appSmokeSuite({bool useProductionStore = false}) {
       await _pumpInteraction(tester);
     }
 
+    nfcService.emit(const NfcTagRejected(NfcTagFailureKind.incompatible));
+    await _pumpInteraction(tester);
+    expect(find.text('Incompatible NFC tag'), findsOneWidget);
+    expect(find.text('No inventory changes were made.'), findsWidgets);
+
+    nfcService.emit(const NfcTagRejected(NfcTagFailureKind.unformatted));
+    await _pumpInteraction(tester);
+    expect(find.text('Tag is not NDEF-formatted'), findsOneWidget);
+    expect(find.text('No inventory changes were made.'), findsWidgets);
+
     nfcService.emit(
       const NfcContentRead(
         'https://filamanager.vibesolutions.de/s#v1.ZyXwVuTsRqPoNmLkJiHgFe',
@@ -269,18 +271,7 @@ void appSmokeSuite({bool useProductionStore = false}) {
     );
     await tester.tap(find.text('Places'));
     await _pumpInteraction(tester);
-    await tester.tap(find.text('Add storage slot'));
-    await _pumpInteraction(tester);
-    await tester.enterText(
-      find.bySemanticsLabel('Storage-slot name'),
-      'Shelf A · 01',
-    );
-    await tester.pump();
-    await tester.runAsync(
-      () =>
-          tester.tap(find.widgetWithText(FilledButton, 'Create storage slot')),
-    );
-    await tester.pumpAndSettle();
+    await _createStorageSlotThroughUi(tester, name: 'Shelf A · 01');
 
     await tester.pumpWidget(const SizedBox.shrink());
     await _pumpInteraction(tester);
@@ -320,18 +311,7 @@ void appSmokeSuite({bool useProductionStore = false}) {
     );
     await tester.tap(find.text('Places'));
     await _pumpInteraction(tester);
-    await tester.tap(find.text('Add storage slot'));
-    await _pumpInteraction(tester);
-    await tester.enterText(
-      find.bySemanticsLabel('Storage-slot name'),
-      'Shelf A · 01',
-    );
-    await tester.pump();
-    await tester.runAsync(
-      () =>
-          tester.tap(find.widgetWithText(FilledButton, 'Create storage slot')),
-    );
-    await tester.pumpAndSettle();
+    await _createStorageSlotThroughUi(tester, name: 'Shelf A · 01');
 
     await tester.tap(find.text('Register NFC tag'));
     await _pumpInteraction(tester);
@@ -363,18 +343,7 @@ void appSmokeSuite({bool useProductionStore = false}) {
     );
     await tester.tap(find.text('Places'));
     await _pumpInteraction(tester);
-    await tester.tap(find.text('Add storage slot'));
-    await _pumpInteraction(tester);
-    await tester.enterText(
-      find.bySemanticsLabel('Storage-slot name'),
-      'Shelf A · 01',
-    );
-    await tester.pump();
-    await tester.runAsync(
-      () =>
-          tester.tap(find.widgetWithText(FilledButton, 'Create storage slot')),
-    );
-    await tester.pumpAndSettle();
+    await _createStorageSlotThroughUi(tester, name: 'Shelf A · 01');
 
     nfcService.availabilityState = NfcAvailability.disabled;
     await tester.tap(find.text('Register NFC tag'));
@@ -435,18 +404,7 @@ void appSmokeSuite({bool useProductionStore = false}) {
     );
     await tester.tap(find.text('Places'));
     await _pumpInteraction(tester);
-    await tester.tap(find.text('Add storage slot'));
-    await _pumpInteraction(tester);
-    await tester.enterText(
-      find.bySemanticsLabel('Storage-slot name'),
-      'Shelf A · 01',
-    );
-    await tester.pump();
-    await tester.runAsync(
-      () =>
-          tester.tap(find.widgetWithText(FilledButton, 'Create storage slot')),
-    );
-    await tester.pumpAndSettle();
+    await _createStorageSlotThroughUi(tester, name: 'Shelf A · 01');
 
     nfcService.pendingWrite = Completer<NfcWriteResult>();
     await tester.tap(find.text('Register NFC tag'));
@@ -508,6 +466,35 @@ void appSmokeSuite({bool useProductionStore = false}) {
   });
 }
 
+Future<void> _createStorageSlotThroughUi(
+  WidgetTester tester, {
+  required String name,
+}) async {
+  await tester.tap(find.text('Add storage slot'));
+  await _pumpInteraction(tester);
+  await tester.enterText(find.bySemanticsLabel('Storage-slot name'), name);
+  await tester.pump();
+
+  final reviewButton = find.widgetWithText(
+    OutlinedButton,
+    'Review storage slot',
+  );
+  expect(tester.widget<OutlinedButton>(reviewButton).onPressed, isNotNull);
+  await tester.tap(reviewButton);
+  await _pumpInteraction(tester);
+  expect(find.text('REVIEW STORAGE SLOT'), findsOneWidget);
+  expect(find.text(name), findsOneWidget);
+  expect(find.text('No inventory changes have been made.'), findsOneWidget);
+
+  final createButton = find.widgetWithText(FilledButton, 'Create storage slot');
+  await tester.runAsync(() => tester.tap(createButton));
+  await tester.pumpAndSettle();
+  await tester.runAsync(
+    () => Future<void>.delayed(const Duration(milliseconds: 50)),
+  );
+  await _pumpInteraction(tester);
+}
+
 Future<void> _launchApp(
   WidgetTester tester,
   InventoryStore Function() inventoryStoreFactory,
@@ -519,7 +506,7 @@ Future<void> _launchApp(
       inventoryStore: inventoryStoreFactory(),
       nfcService: nfcService,
       incomingLinkService: incomingLinkService,
-      storageSlotIdGenerator: () => _storageSlotId,
+      storageSlotIdGenerator: () => StorageSlotId.parse(_storageSlotId),
     ),
   );
 

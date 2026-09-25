@@ -1,10 +1,15 @@
+import 'package:filamanager/inventory/storage_slot_id.dart';
+
 final class StorageSlot {
   const StorageSlot({required this.id, required this.name});
 
-  final String id;
+  final StorageSlotId id;
   final String name;
 
-  Map<String, Object> toJson() => <String, Object>{'id': id, 'name': name};
+  Map<String, Object> toJson() => <String, Object>{
+    'id': id.value,
+    'name': name,
+  };
 
   static StorageSlot fromJson(Map<String, dynamic> json) {
     final id = json['id'];
@@ -13,6 +18,6 @@ final class StorageSlot {
       throw const FormatException('Invalid storage slot.');
     }
 
-    return StorageSlot(id: id, name: name);
+    return StorageSlot(id: StorageSlotId.parse(id), name: name);
   }
 }

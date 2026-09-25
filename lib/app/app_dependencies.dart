@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:math';
 
 import 'package:filamanager/inventory/storage_slot.dart';
+import 'package:filamanager/inventory/storage_slot_id.dart';
 import 'package:filamanager/persistence/inventory_store.dart';
 import 'package:filamanager/services/incoming_link_service.dart';
 import 'package:filamanager/services/nfc_service.dart';
@@ -21,7 +22,7 @@ final class AppDependencies {
   final NfcService nfcService;
   final IncomingLinkService incomingLinkService;
   final Uri? initialIncomingLink;
-  final String Function() _storageSlotIdGenerator;
+  final StorageSlotId Function() _storageSlotIdGenerator;
 
   Future<StorageSlot> createStorageSlot(String name) async {
     final storageSlot = StorageSlot(
@@ -36,17 +37,17 @@ final class AppDependencies {
     return storageSlot;
   }
 
-  static String _newOpaqueId() {
+  static StorageSlotId _newOpaqueId() {
     final random = Random.secure();
     final bytes = List<int>.generate(16, (_) => random.nextInt(256));
-    return base64UrlEncode(bytes).replaceAll('=', '');
+    return StorageSlotId.parse(base64UrlEncode(bytes).replaceAll('=', ''));
   }
 
   static Future<AppDependencies> initialize({
     required InventoryStore inventoryStore,
     required NfcService nfcService,
     required IncomingLinkService incomingLinkService,
-    String Function() storageSlotIdGenerator = _newOpaqueId,
+    StorageSlotId Function() storageSlotIdGenerator = _newOpaqueId,
   }) async {
     final inventory = await inventoryStore.open();
     final initialIncomingLink = await incomingLinkService.takeInitialLink();

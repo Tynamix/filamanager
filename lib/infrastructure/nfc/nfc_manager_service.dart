@@ -15,6 +15,7 @@ final class NfcManagerService implements NfcService {
   final platform.NfcManager _manager;
   final _events = StreamController<NfcEvent>.broadcast();
   var _sessionActive = false;
+  var _tagWriteInProgress = false;
   Completer<NfcWriteResult>? _pendingWrite;
 
   @override
@@ -40,12 +41,15 @@ final class NfcManagerService implements NfcService {
     }
 
     final pendingWrite = _pendingWrite;
+    final tagWriteInProgress = _tagWriteInProgress;
     await _stopSession(errorMessageIos: 'Tag registration cancelled.');
-    if (pendingWrite != null && !pendingWrite.isCompleted) {
-      pendingWrite.complete(const NfcWriteCancelled());
-    } else {
-      _events.add(const NfcScanCancelled());
+    if (pendingWrite != null) {
+      if (!pendingWrite.isCompleted && !tagWriteInProgress) {
+        pendingWrite.complete(const NfcWriteCancelled());
+      }
+      return;
     }
+    _events.add(const NfcScanCancelled());
   }
 
   @override
@@ -78,9 +82,22 @@ final class NfcManagerService implements NfcService {
   Future<void> _readTag(platform.NfcTag tag) async {
     try {
       final ndef = platform_ndef.Ndef.from(tag);
-      final message = ndef == null
-          ? null
-          : ndef.cachedMessage ?? await ndef.read();
+      if (ndef == null) {
+        final isUnformatted =
+            defaultTargetPlatform == TargetPlatform.android &&
+            android.NdefFormatableAndroid.from(tag) != null;
+        _events.add(
+          NfcTagRejected(
+            isUnformatted
+                ? NfcTagFailureKind.unformatted
+                : NfcTagFailureKind.incompatible,
+          ),
+        );
+        await _stopSession(errorMessageIos: 'Use a preformatted NDEF tag.');
+        return;
+      }
+
+      final message = ndef.cachedMessage ?? await ndef.read();
       _events.add(NfcContentRead(NdefStorageSlotCodec.decode(message) ?? ''));
       await _stopSession(alertMessageIos: 'Storage-slot tag read.');
     } catch (_) {
@@ -154,6 +171,7 @@ final class NfcManagerService implements NfcService {
     NfcWriteResult outcome;
     String? successMessage;
     String? errorMessage;
+    var writeCommitted = false;
     try {
       final ndef = platform_ndef.Ndef.from(tag);
       if (ndef == null) {
@@ -172,13 +190,26 @@ final class NfcManagerService implements NfcService {
         );
         errorMessage = 'This tag is too small.';
       } else {
-        await ndef.write(message: message);
+        _tagWriteInProgress = true;
+        try {
+          await ndef.write(message: message);
+        } finally {
+          _tagWriteInProgress = false;
+        }
         outcome = const NfcWriteSucceeded();
         successMessage = 'FilaManager tag registered.';
+        writeCommitted = true;
       }
     } catch (error) {
       outcome = _writeFailure(error);
       errorMessage = 'The tag was not changed.';
+    }
+
+    if (writeCommitted) {
+      _sessionActive = false;
+      if (!result.isCompleted) {
+        result.complete(outcome);
+      }
     }
 
     await _stopSession(
