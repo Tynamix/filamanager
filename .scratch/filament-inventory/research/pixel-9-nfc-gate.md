@@ -107,3 +107,7 @@ Test real physical NFC dispatch where Android permits it. Record what the platfo
 - Representative plastic-bin placement: Keep provisionally; the measured ten-read target has not been met.
 - NFC package: Keep `nfc_manager` 4.2.1 and `nfc_manager_ndef` 1.1.0 behind `NfcService` for continued development. Replace only if the remaining physical matrix exposes a package-level blocker. This is not a release qualification decision.
 - Any replacement must stay behind the application-owned `NfcService` interface.
+
+## Validation cleanup
+
+The existing app-level integration suite was attempted on the Pixel 9 after the physical checks, but the display locked and the first test did not complete. The run was interrupted; this is not a passing integration result. Flutter's test cleanup removed the debug app package and its dedicated gate slot. The normal debug APK was rebuilt and reinstalled, and the single gate slot was restored with its original identity. The restored inventory document's SHA-256 exactly matched the pre-test value recorded above. The app started again and Android reported the host as verified. The phone's original 30-second display timeout was restored, and the temporary screen recording was removed.
