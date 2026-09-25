@@ -1,7 +1,9 @@
 # Early Pixel 9 NFC gate
 
-**Date:** 2026-09-25  
-**Application source:** `origin/main` at `8c69fdd6be362f156505bbe8392b4cefe302a9c0`  
+**Date:** 2026-09-25
+
+**Application source:** `origin/main` at `8c69fdd6be362f156505bbe8392b4cefe302a9c0`
+
 **Gate status:** Not passed yet. The core write/read path worked on the representative tag, but the required controlled ten-read timing run and failure/state matrices were not completed.
 
 ## Setup and controls
