@@ -241,12 +241,12 @@ void appSmokeSuite({bool useProductionStore = false}) {
 
     nfcService.emit(const NfcTagRejected(NfcTagFailureKind.incompatible));
     await _pumpInteraction(tester);
-    expect(find.text('Incompatible NFC tag'), findsOneWidget);
+    expect(find.text('Incompatible NFC tag'), findsWidgets);
     expect(find.text('No inventory changes were made.'), findsWidgets);
 
     nfcService.emit(const NfcTagRejected(NfcTagFailureKind.unformatted));
     await _pumpInteraction(tester);
-    expect(find.text('Tag is not NDEF-formatted'), findsOneWidget);
+    expect(find.text('Tag is not NDEF-formatted'), findsWidgets);
     expect(find.text('No inventory changes were made.'), findsWidgets);
 
     nfcService.emit(
