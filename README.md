@@ -5,10 +5,17 @@ storage slots, and material slots. Android is the first release target. The
 application ID is `de.vibesolutions.filamanager` and the Android build targets
 API 36.
 
-The current increment provides the production application shell, a versioned
-local inventory store, and application-owned NFC and incoming-link boundaries.
-Inventory, NFC, and link behavior is added through those boundaries in later
-increments.
+The current increment provides the production application shell, persistent
+storage slots, strict storage-slot reference routing, foreground NFC reading
+and tag registration, and cold or warm Android App Link handling. Scanning or
+opening a link only opens a read-only storage-slot context and never changes
+inventory.
+
+The canonical tag payload is one NFC Forum URI record containing
+`https://filamanager.vibesolutions.de/s#v1.<storage-slot-id>`. The NFC and App
+Link packages remain behind application-owned boundaries so tests use
+deterministic adapters. Static host and signing details are documented in
+[`docs/app-link-host.md`](docs/app-link-host.md).
 
 ## Prerequisites
 

@@ -2,6 +2,8 @@ import 'dart:async';
 
 import 'package:filamanager/app/app_dependencies.dart';
 import 'package:filamanager/app/fila_theme.dart';
+import 'package:filamanager/inventory/storage_slot.dart';
+import 'package:filamanager/inventory/storage_slot_reference.dart';
 import 'package:filamanager/services/nfc_service.dart';
 import 'package:flutter/material.dart';
 
@@ -32,6 +34,8 @@ final class _InventoryShell extends StatefulWidget {
 
 final class _InventoryShellState extends State<_InventoryShell> {
   var _selectedIndex = 0;
+  StorageSlot? _selectedStorageSlot;
+  String? _referenceError;
   late final StreamSubscription<NfcEvent> _nfcEvents;
   late final StreamSubscription<Uri> _incomingLinks;
 
@@ -41,12 +45,54 @@ final class _InventoryShellState extends State<_InventoryShell> {
     _nfcEvents = widget.dependencies.nfcService.events.listen((event) {
       switch (event) {
         case NfcUriPayloadRead():
-          _showExternalInput('NFC input received');
+          _openStorageSlotReference(
+            event.payload,
+            receivedMessage: 'NFC input received',
+            invalidReferenceTitle: 'Unknown tag',
+          );
+        case NfcContentRead():
+          _openStorageSlotReference(
+            Uri.tryParse(event.content),
+            receivedMessage: 'NFC input received',
+            invalidReferenceTitle: 'Unknown tag',
+          );
+        case NfcTagRejected():
+          _showScanFailure(
+            event.kind == NfcTagFailureKind.unformatted
+                ? 'Tag is not NDEF-formatted'
+                : 'Incompatible NFC tag',
+          );
+        case NfcScanUnavailable():
+          _showInventoryUnchangedResult(
+            _nfcAvailabilityMessage(event.availability),
+          );
+        case NfcScanCancelled():
+          _showInventoryUnchangedResult('Scan cancelled');
+        case NfcScanFailed():
+          _showInventoryUnchangedResult('NFC scan failed');
       }
     });
-    _incomingLinks = widget.dependencies.incomingLinkService.links.listen((_) {
-      _showExternalInput('Incoming link received');
+    _incomingLinks = widget.dependencies.incomingLinkService.links.listen((
+      uri,
+    ) {
+      _openStorageSlotReference(
+        uri,
+        receivedMessage: 'Incoming link received',
+        invalidReferenceTitle: 'Invalid storage-slot link',
+      );
     });
+    final initialIncomingLink = widget.dependencies.initialIncomingLink;
+    if (initialIncomingLink != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          _openStorageSlotReference(
+            initialIncomingLink,
+            receivedMessage: 'Incoming link received',
+            invalidReferenceTitle: 'Invalid storage-slot link',
+          );
+        }
+      });
+    }
   }
 
   @override
@@ -76,14 +122,21 @@ final class _InventoryShellState extends State<_InventoryShell> {
           message: 'No active filament spools yet',
         ),
       ),
-      const _InventoryDestination(
+      _InventoryDestination(
         icon: Icons.shelves,
         label: 'Places',
-        content: _EmptyArea(
-          icon: Icons.shelves,
-          title: 'Places',
-          message: 'No storage slots or material units yet',
-        ),
+        content: _selectedStorageSlot != null
+            ? _StorageSlotContextView(
+                storageSlot: _selectedStorageSlot!,
+                onRegisterTag: () => _registerTag(_selectedStorageSlot!),
+              )
+            : _referenceError != null
+            ? _ReferenceErrorView(title: _referenceError!)
+            : _PlacesView(
+                storageSlots: widget.dependencies.inventory.storageSlots,
+                onAddStorageSlot: _createStorageSlot,
+                onOpenStorageSlot: _openStorageSlot,
+              ),
       ),
       const _InventoryDestination(
         icon: Icons.archive_outlined,
@@ -97,9 +150,20 @@ final class _InventoryShellState extends State<_InventoryShell> {
     ];
 
     return PopScope(
-      canPop: _selectedIndex == 0,
+      canPop:
+          _selectedIndex == 0 &&
+          _selectedStorageSlot == null &&
+          _referenceError == null,
       onPopInvokedWithResult: (didPop, result) {
-        if (!didPop && _selectedIndex != 0) {
+        if (didPop) {
+          return;
+        }
+        if (_selectedStorageSlot != null || _referenceError != null) {
+          setState(() {
+            _selectedStorageSlot = null;
+            _referenceError = null;
+          });
+        } else if (_selectedIndex != 0) {
           setState(() => _selectedIndex = 0);
         }
       },
@@ -159,10 +223,146 @@ final class _InventoryShellState extends State<_InventoryShell> {
   }
 
   void _selectDestination(int index) {
-    setState(() => _selectedIndex = index);
+    setState(() {
+      _selectedIndex = index;
+      if (index != 2) {
+        _selectedStorageSlot = null;
+        _referenceError = null;
+      }
+    });
   }
 
-  void _showExternalInput(String message) {
+  Future<void> _createStorageSlot() async {
+    final name = await showModalBottomSheet<String>(
+      context: context,
+      isScrollControlled: true,
+      builder: (context) => const _CreateStorageSlotSheet(),
+    );
+    if (name == null || !mounted) {
+      return;
+    }
+
+    final storageSlot = await widget.dependencies.createStorageSlot(name);
+    if (!mounted) {
+      return;
+    }
+    setState(() => _selectedStorageSlot = storageSlot);
+  }
+
+  void _openStorageSlot(StorageSlot storageSlot) {
+    setState(() {
+      _selectedStorageSlot = storageSlot;
+      _referenceError = null;
+    });
+  }
+
+  void _openStorageSlotReference(
+    Uri? uri, {
+    required String receivedMessage,
+    required String invalidReferenceTitle,
+  }) {
+    final storageSlotId = uri == null ? null : StorageSlotReference.parse(uri);
+    StorageSlot? storageSlot;
+    if (storageSlotId != null) {
+      for (final candidate in widget.dependencies.inventory.storageSlots) {
+        if (candidate.id == storageSlotId) {
+          storageSlot = candidate;
+          break;
+        }
+      }
+    }
+
+    setState(() {
+      _selectedIndex = 2;
+      _selectedStorageSlot = storageSlot;
+      _referenceError = storageSlotId == null
+          ? invalidReferenceTitle
+          : storageSlot == null
+          ? 'Unknown storage slot'
+          : null;
+    });
+    if (_referenceError != null) {
+      _showInventoryUnchangedResult(receivedMessage);
+    }
+  }
+
+  void _showScanFailure(String title) {
+    setState(() {
+      _selectedIndex = 2;
+      _selectedStorageSlot = null;
+      _referenceError = title;
+    });
+    _showInventoryUnchangedResult(title);
+  }
+
+  Future<void> _registerTag(StorageSlot storageSlot) async {
+    final availability = await widget.dependencies.nfcService.availability();
+    if (!mounted) {
+      return;
+    }
+    if (availability != NfcAvailability.available) {
+      _showInventoryUnchangedResult(_nfcAvailabilityMessage(availability));
+      return;
+    }
+
+    final reference = StorageSlotReference.forStorageSlot(storageSlot.id);
+    final confirmed = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      builder: (context) => _RegisterTagSheet(reference: reference),
+    );
+    if (confirmed != true || !mounted) {
+      return;
+    }
+
+    final resultFuture = widget.dependencies.nfcService
+        .writeStorageSlotReference(reference);
+    final result = await showModalBottomSheet<NfcWriteResult>(
+      context: context,
+      isDismissible: false,
+      enableDrag: false,
+      builder: (context) => _WriteTagProgressSheet(
+        result: resultFuture,
+        onCancel: widget.dependencies.nfcService.cancelSession,
+      ),
+    );
+    if (!mounted) {
+      return;
+    }
+    _showInventoryUnchangedResult(
+      _writeResultMessage(
+        result ?? const NfcWriteFailed(NfcWriteFailureKind.unexpected),
+      ),
+    );
+  }
+
+  String _writeResultMessage(NfcWriteResult result) {
+    return switch (result) {
+      NfcWriteSucceeded() => 'Tag registered',
+      NfcWriteCancelled() => 'Tag registration cancelled',
+      NfcWriteFailed(:final kind) => switch (kind) {
+        NfcWriteFailureKind.disabled => 'NFC is disabled',
+        NfcWriteFailureKind.unavailable => 'NFC is unavailable',
+        NfcWriteFailureKind.incompatible => 'Incompatible NFC tag',
+        NfcWriteFailureKind.unformatted => 'Tag is not NDEF-formatted',
+        NfcWriteFailureKind.readOnly => 'Tag is read-only',
+        NfcWriteFailureKind.insufficientCapacity =>
+          'Tag does not have enough capacity',
+        NfcWriteFailureKind.interrupted => 'Tag write was interrupted',
+        NfcWriteFailureKind.unexpected => 'Tag registration failed',
+      },
+    };
+  }
+
+  String _nfcAvailabilityMessage(NfcAvailability availability) {
+    return switch (availability) {
+      NfcAvailability.disabled => 'NFC is disabled',
+      NfcAvailability.unavailable => 'NFC is unavailable',
+      NfcAvailability.available => 'NFC is available',
+    };
+  }
+
+  void _showInventoryUnchangedResult(String message) {
     if (!mounted) {
       return;
     }
@@ -186,6 +386,377 @@ final class _InventoryShellState extends State<_InventoryShell> {
           ),
         ),
       );
+  }
+}
+
+final class _ReferenceErrorView extends StatelessWidget {
+  const _ReferenceErrorView({required this.title});
+
+  final String title;
+
+  @override
+  Widget build(BuildContext context) {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.fromLTRB(18, 20, 18, 24),
+      child: Align(
+        alignment: Alignment.topCenter,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 620),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const _Eyebrow('Nothing changed'),
+              const SizedBox(height: 4),
+              Text(title, style: Theme.of(context).textTheme.displayMedium),
+              const SizedBox(height: 20),
+              const _PrototypeCard(
+                child: _EmptyCardContent(
+                  icon: Icons.nfc_outlined,
+                  title: 'No inventory changes were made.',
+                  message: 'Try scanning again or choose a place manually.',
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+final class _PlacesView extends StatelessWidget {
+  const _PlacesView({
+    required this.storageSlots,
+    required this.onAddStorageSlot,
+    required this.onOpenStorageSlot,
+  });
+
+  final List<StorageSlot> storageSlots;
+  final Future<void> Function() onAddStorageSlot;
+  final ValueChanged<StorageSlot> onOpenStorageSlot;
+
+  @override
+  Widget build(BuildContext context) {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.fromLTRB(18, 20, 18, 24),
+      child: Align(
+        alignment: Alignment.topCenter,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 620),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const _Eyebrow('Local inventory'),
+              const SizedBox(height: 4),
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      'Places',
+                      style: Theme.of(context).textTheme.displayMedium,
+                    ),
+                  ),
+                  FilledButton.icon(
+                    onPressed: onAddStorageSlot,
+                    icon: const Icon(Icons.add),
+                    label: const Text('Add storage slot'),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 20),
+              if (storageSlots.isEmpty)
+                const _PrototypeCard(
+                  child: _EmptyCardContent(
+                    icon: Icons.shelves,
+                    title: 'No storage slots or material units yet',
+                    message: 'Create a storage slot to get started.',
+                  ),
+                )
+              else
+                for (final storageSlot in storageSlots) ...[
+                  _PrototypeCard(
+                    child: Material(
+                      color: Colors.transparent,
+                      child: ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        leading: const Icon(Icons.shelves),
+                        title: Text(storageSlot.name),
+                        subtitle: const Text('Storage slot · Empty'),
+                        trailing: const Icon(Icons.chevron_right),
+                        onTap: () => onOpenStorageSlot(storageSlot),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+final class _StorageSlotContextView extends StatelessWidget {
+  const _StorageSlotContextView({
+    required this.storageSlot,
+    required this.onRegisterTag,
+  });
+
+  final StorageSlot storageSlot;
+  final Future<void> Function() onRegisterTag;
+
+  @override
+  Widget build(BuildContext context) {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.fromLTRB(18, 20, 18, 24),
+      child: Align(
+        alignment: Alignment.topCenter,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 620),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const _Eyebrow('Read-only storage-slot context'),
+              const SizedBox(height: 4),
+              Text(
+                storageSlot.name,
+                style: Theme.of(context).textTheme.displayMedium,
+              ),
+              const SizedBox(height: 20),
+              const _PrototypeCard(
+                child: _EmptyCardContent(
+                  icon: Icons.inventory_2_outlined,
+                  title: 'Empty',
+                  message: 'No filament spool occupies this storage slot.',
+                ),
+              ),
+              const SizedBox(height: 16),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton.icon(
+                  onPressed: onRegisterTag,
+                  icon: const Icon(Icons.nfc),
+                  label: const Text('Register NFC tag'),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+final class _RegisterTagSheet extends StatelessWidget {
+  const _RegisterTagSheet({required this.reference});
+
+  final Uri reference;
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const _Eyebrow('Confirm tag write'),
+            const SizedBox(height: 6),
+            Text(
+              'Replace tag contents?',
+              style: Theme.of(context).textTheme.headlineMedium,
+            ),
+            const SizedBox(height: 12),
+            const Text('The complete NDEF message will be replaced.'),
+            const SizedBox(height: 10),
+            SelectableText(reference.toString()),
+            const SizedBox(height: 8),
+            const Text('Registering this tag will not change inventory.'),
+            const SizedBox(height: 18),
+            FilledButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text('Replace and register'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('Cancel'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+final class _WriteTagProgressSheet extends StatefulWidget {
+  const _WriteTagProgressSheet({required this.result, required this.onCancel});
+
+  final Future<NfcWriteResult> result;
+  final Future<void> Function() onCancel;
+
+  @override
+  State<_WriteTagProgressSheet> createState() => _WriteTagProgressSheetState();
+}
+
+final class _WriteTagProgressSheetState extends State<_WriteTagProgressSheet> {
+  var _cancelling = false;
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_closeWithResult());
+  }
+
+  Future<void> _closeWithResult() async {
+    final result = await widget.result;
+    if (mounted) {
+      Navigator.of(context).pop(result);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const _Eyebrow('NFC tag registration'),
+            const SizedBox(height: 6),
+            Text(
+              _cancelling ? 'Cancelling…' : 'Ready to write',
+              style: Theme.of(context).textTheme.headlineMedium,
+            ),
+            const SizedBox(height: 12),
+            const LinearProgressIndicator(),
+            const SizedBox(height: 12),
+            const Text('Hold your phone near the writable NDEF tag.'),
+            const SizedBox(height: 16),
+            TextButton(
+              onPressed: _cancelling
+                  ? null
+                  : () async {
+                      setState(() => _cancelling = true);
+                      await widget.onCancel();
+                    },
+              child: const Text('Cancel tag registration'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+final class _CreateStorageSlotSheet extends StatefulWidget {
+  const _CreateStorageSlotSheet();
+
+  @override
+  State<_CreateStorageSlotSheet> createState() =>
+      _CreateStorageSlotSheetState();
+}
+
+final class _CreateStorageSlotSheetState
+    extends State<_CreateStorageSlotSheet> {
+  final _nameController = TextEditingController();
+  var _reviewing = false;
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final name = _nameController.text.trim();
+    return SafeArea(
+      child: Padding(
+        padding: EdgeInsets.fromLTRB(
+          20,
+          20,
+          20,
+          20 + MediaQuery.viewInsetsOf(context).bottom,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: _reviewing
+              ? [
+                  const _Eyebrow('Review storage slot'),
+                  const SizedBox(height: 6),
+                  Text(
+                    'Create this storage slot?',
+                    style: Theme.of(context).textTheme.headlineMedium,
+                  ),
+                  const SizedBox(height: 18),
+                  _PrototypeCard(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const _Eyebrow('Storage-slot name'),
+                        const SizedBox(height: 4),
+                        Text(
+                          name,
+                          style: Theme.of(context).textTheme.titleMedium,
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  const Text('No inventory changes have been made.'),
+                  const SizedBox(height: 18),
+                  FilledButton(
+                    onPressed: _submit,
+                    child: const Text('Create storage slot'),
+                  ),
+                  TextButton(
+                    onPressed: () => setState(() => _reviewing = false),
+                    child: const Text('Back to edit'),
+                  ),
+                ]
+              : [
+                  const _Eyebrow('New place'),
+                  const SizedBox(height: 6),
+                  Text(
+                    'Create storage slot',
+                    style: Theme.of(context).textTheme.headlineMedium,
+                  ),
+                  const SizedBox(height: 18),
+                  TextField(
+                    controller: _nameController,
+                    autofocus: true,
+                    decoration: const InputDecoration(
+                      labelText: 'Storage-slot name',
+                    ),
+                    onChanged: (_) => setState(() {}),
+                    onSubmitted: name.isEmpty ? null : (_) => _review(),
+                  ),
+                  const SizedBox(height: 18),
+                  OutlinedButton(
+                    onPressed: name.isEmpty ? null : _review,
+                    child: const Text('Review storage slot'),
+                  ),
+                ],
+        ),
+      ),
+    );
+  }
+
+  void _review() {
+    FocusScope.of(context).unfocus();
+    setState(() => _reviewing = true);
+  }
+
+  void _submit() {
+    final name = _nameController.text.trim();
+    if (name.isNotEmpty) {
+      Navigator.of(context).pop(name);
+    }
   }
 }
 

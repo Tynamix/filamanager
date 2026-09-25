@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:filamanager/inventory/storage_slot.dart';
 import 'package:filamanager/persistence/inventory_store.dart';
 
 final class JsonInventoryStore implements InventoryStore {
@@ -32,16 +33,38 @@ final class JsonInventoryStore implements InventoryStore {
       throw FormatException('Unsupported inventory schema: $schemaVersion');
     }
 
-    return InventoryDocument(schemaVersion: schemaVersion);
+    final storageSlotsJson = decoded['storageSlots'] ?? const <Object>[];
+    if (storageSlotsJson is! List) {
+      throw const FormatException('Inventory storage slots must be a list.');
+    }
+
+    return InventoryDocument(
+      schemaVersion: schemaVersion,
+      storageSlots: [
+        for (final storageSlotJson in storageSlotsJson)
+          if (storageSlotJson is Map<String, dynamic>)
+            StorageSlot.fromJson(storageSlotJson)
+          else
+            throw const FormatException('Invalid storage slot entry.'),
+      ],
+    );
   }
 
-  Future<void> _createEmptyStore() async {
+  @override
+  Future<void> save(InventoryDocument inventory) async {
     await file.parent.create(recursive: true);
     final temporaryFile = File('${file.path}.tmp');
     final contents = jsonEncode(<String, Object>{
-      'schemaVersion': currentSchemaVersion,
+      'schemaVersion': inventory.schemaVersion,
+      'storageSlots': [
+        for (final storageSlot in inventory.storageSlots) storageSlot.toJson(),
+      ],
     });
     await temporaryFile.writeAsString(contents, flush: true);
     await temporaryFile.rename(file.path);
+  }
+
+  Future<void> _createEmptyStore() async {
+    await save(const InventoryDocument(schemaVersion: currentSchemaVersion));
   }
 }
