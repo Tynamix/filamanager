@@ -64,9 +64,7 @@ final class _InventoryShellState extends State<_InventoryShell> {
           );
         case NfcScanUnavailable():
           _showInventoryUnchangedResult(
-            event.availability == NfcAvailability.disabled
-                ? 'NFC is disabled'
-                : 'NFC is unavailable',
+            _nfcAvailabilityMessage(event.availability),
           );
         case NfcScanCancelled():
           _showInventoryUnchangedResult('Scan cancelled');
@@ -303,11 +301,7 @@ final class _InventoryShellState extends State<_InventoryShell> {
       return;
     }
     if (availability != NfcAvailability.available) {
-      _showInventoryUnchangedResult(
-        availability == NfcAvailability.disabled
-            ? 'NFC is disabled'
-            : 'NFC is unavailable',
-      );
+      _showInventoryUnchangedResult(_nfcAvailabilityMessage(availability));
       return;
     }
 
@@ -357,6 +351,14 @@ final class _InventoryShellState extends State<_InventoryShell> {
         NfcWriteFailureKind.interrupted => 'Tag write was interrupted',
         NfcWriteFailureKind.unexpected => 'Tag registration failed',
       },
+    };
+  }
+
+  String _nfcAvailabilityMessage(NfcAvailability availability) {
+    return switch (availability) {
+      NfcAvailability.disabled => 'NFC is disabled',
+      NfcAvailability.unavailable => 'NFC is unavailable',
+      NfcAvailability.available => 'NFC is available',
     };
   }
 

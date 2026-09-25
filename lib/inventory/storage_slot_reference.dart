@@ -3,7 +3,7 @@ import 'package:filamanager/inventory/storage_slot_id.dart';
 abstract final class StorageSlotReference {
   static const productionHost = 'filamanager.vibesolutions.de';
   static const path = '/s';
-  static final _fragmentPattern = RegExp(r'^v1\.([A-Za-z0-9_-]{22})$');
+  static const _fragmentPrefix = 'v1.';
 
   static StorageSlotId? parse(Uri uri) {
     if (uri.scheme != 'https' ||
@@ -15,8 +15,12 @@ abstract final class StorageSlotReference {
       return null;
     }
 
-    final value = _fragmentPattern.firstMatch(uri.fragment)?.group(1);
-    return value == null ? null : StorageSlotId.tryParse(value);
+    if (!uri.fragment.startsWith(_fragmentPrefix)) {
+      return null;
+    }
+    return StorageSlotId.tryParse(
+      uri.fragment.substring(_fragmentPrefix.length),
+    );
   }
 
   static Uri forStorageSlot(StorageSlotId storageSlotId) {

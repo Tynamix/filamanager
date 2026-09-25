@@ -83,16 +83,7 @@ final class NfcManagerService implements NfcService {
     try {
       final ndef = platform_ndef.Ndef.from(tag);
       if (ndef == null) {
-        final isUnformatted =
-            defaultTargetPlatform == TargetPlatform.android &&
-            android.NdefFormatableAndroid.from(tag) != null;
-        _events.add(
-          NfcTagRejected(
-            isUnformatted
-                ? NfcTagFailureKind.unformatted
-                : NfcTagFailureKind.incompatible,
-          ),
-        );
+        _events.add(NfcTagRejected(_unsupportedTagKind(tag)));
         await _stopSession(errorMessageIos: 'Use a preformatted NDEF tag.');
         return;
       }
@@ -175,11 +166,14 @@ final class NfcManagerService implements NfcService {
     try {
       final ndef = platform_ndef.Ndef.from(tag);
       if (ndef == null) {
-        outcome =
-            defaultTargetPlatform == TargetPlatform.android &&
-                android.NdefFormatableAndroid.from(tag) != null
-            ? const NfcWriteFailed(NfcWriteFailureKind.unformatted)
-            : const NfcWriteFailed(NfcWriteFailureKind.incompatible);
+        outcome = switch (_unsupportedTagKind(tag)) {
+          NfcTagFailureKind.unformatted => const NfcWriteFailed(
+            NfcWriteFailureKind.unformatted,
+          ),
+          NfcTagFailureKind.incompatible => const NfcWriteFailed(
+            NfcWriteFailureKind.incompatible,
+          ),
+        };
         errorMessage = 'Use a preformatted NDEF tag.';
       } else if (!ndef.isWritable) {
         outcome = const NfcWriteFailed(NfcWriteFailureKind.readOnly);
@@ -235,6 +229,15 @@ final class NfcManagerService implements NfcService {
         const NfcWriteFailed(NfcWriteFailureKind.interrupted),
       _ => const NfcWriteFailed(NfcWriteFailureKind.unexpected),
     };
+  }
+
+  NfcTagFailureKind _unsupportedTagKind(platform.NfcTag tag) {
+    final isUnformatted =
+        defaultTargetPlatform == TargetPlatform.android &&
+        android.NdefFormatableAndroid.from(tag) != null;
+    return isUnformatted
+        ? NfcTagFailureKind.unformatted
+        : NfcTagFailureKind.incompatible;
   }
 
   NfcWriteResult _writeFailure(Object error) {
