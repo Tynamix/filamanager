@@ -4,7 +4,7 @@
 
 **Application source:** `origin/main` at `8c69fdd6be362f156505bbe8392b4cefe302a9c0`
 
-**Gate status:** Passed as an early hardware viability gate on 2026-09-26. The product owner accepted the observed write/read and navigation path without a fixed ten-read timing trial. Release qualification remains in [ticket 27](../issues/27-qualify-play-delivered-mvp.md).
+**Gate status:** Passed as an early hardware viability gate on 2026-09-26. The product owner accepted the observed write/read and navigation path and declined a fixed ten-read quota. Release qualification records placement reliability and latency without a numeric trial quota in [ticket 27](../issues/27-qualify-play-delivered-mvp.md).
 
 ## Setup and controls
 

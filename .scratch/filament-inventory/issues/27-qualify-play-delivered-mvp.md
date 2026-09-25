@@ -14,6 +14,7 @@
 - [ ] Representative storage-slot tags in their intended placement remain reliably readable; record observed attempts and latency without a fixed ten-read quota, and change the tag or placement if unreliable.
 - [ ] Physical NFC recovery covers cancellation, NFC disabled, read-only NDEF, unformatted and insufficient or incompatible tags where available, an interrupted sacrificial write, immediate retry, repeated scan, app restart, and alternative placement. Failures show no stale success, unintended reference, or inventory mutation.
 - [ ] App Link qualification records unlocked, locked, foreground, background, normal termination, force-stop, never-launched, offline, and user-disabled handling where Android permits, without promising operating-system-controlled behavior.
+- [ ] The Play-installed app safely handles malformed and unknown local identifiers, repeated delivery, and read-only navigation; an app-absent device reaches the safe `/s` browser fallback.
 - [ ] Observed network behavior and the shipped dependency graph support accurate Data safety and privacy-policy declarations.
 - [ ] Content rating, target audience, ads, app access, health, financial, support contact, store listing, countries, and the release-time price choice match the final product.
 - [ ] If the account is subject to the personal-account production-access rule, at least 12 testers remain continuously opted into the required closed test for at least 14 days and production access is obtained.
