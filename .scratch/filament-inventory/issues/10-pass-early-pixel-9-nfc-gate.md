@@ -13,3 +13,7 @@
 - [ ] Locked, unlocked, backgrounded, normally terminated, force-stopped, never-launched, offline, and user-disabled link-handling states are checked as the Android version permits, without promising behavior controlled by the operating system.
 - [ ] No failure shows stale success, writes an unintended reference, or changes inventory; observed results and redacted diagnostics are retained as reproducible evidence.
 - [ ] The gate records a clear keep-or-replace decision for the intended tags, physical placement, and NFC package, and any required replacement remains behind the existing application-owned interface.
+
+## Comments
+
+- 2026-09-25: The Pixel 9 production app wrote a canonical reference to a representative writable Type 2 tag, Android independently read the matching single URI record, an explicit foreground scan opened the same empty storage-slot context, and the local inventory hash stayed unchanged. Android reported the production App Link host as verified. The physical metadata and incomplete matrix are recorded in [the gate evidence](../research/pixel-9-nfc-gate.md). The controlled ten-read timing target and failure/state matrices remain open, so this ticket is not marked complete.
