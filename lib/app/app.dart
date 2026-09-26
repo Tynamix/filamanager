@@ -306,21 +306,31 @@ final class _InventoryShellState extends State<_InventoryShell> {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) _spoolDetailsFocus.requestFocus();
       });
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Semantics(
-            liveRegion: true,
-            child: Text('Filament spool registered'),
+      ScaffoldMessenger.of(context)
+        ..removeCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(
+            content: Semantics(
+              liveRegion: true,
+              child: Text('Filament spool registered'),
+            ),
           ),
-        ),
-      );
+        );
     } catch (_) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Could not register filament spool. Try again.'),
-        ),
-      );
+      _addSpoolFocus.requestFocus();
+      ScaffoldMessenger.of(context)
+        ..removeCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(
+            content: Semantics(
+              liveRegion: true,
+              child: const Text(
+                'Could not register filament spool. Try again.',
+              ),
+            ),
+          ),
+        );
     }
   }
 
@@ -347,14 +357,29 @@ final class _InventoryShellState extends State<_InventoryShell> {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) _spoolDetailsFocus.requestFocus();
       });
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Filament spool details saved')),
-      );
+      ScaffoldMessenger.of(context)
+        ..removeCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(
+            content: Semantics(
+              liveRegion: true,
+              child: const Text('Filament spool details saved'),
+            ),
+          ),
+        );
     } catch (_) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Could not save details. Try again.')),
-      );
+      _editSpoolFocus.requestFocus();
+      ScaffoldMessenger.of(context)
+        ..removeCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(
+            content: Semantics(
+              liveRegion: true,
+              child: const Text('Could not save details. Try again.'),
+            ),
+          ),
+        );
     }
   }
 

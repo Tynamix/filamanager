@@ -8,15 +8,16 @@ import 'package:path_provider/path_provider.dart';
 
 abstract final class ProductionCompositionRoot {
   static Future<AppDependencies> create() async {
-    final incomingLinkService = AppLinksIncomingLinkService();
     final applicationDirectory = await getApplicationSupportDirectory();
+    final inventoryStore = JsonInventoryStore(
+      File('${applicationDirectory.path}/inventory.json'),
+    );
+    await inventoryStore.open();
 
     return AppDependencies.initialize(
-      inventoryStore: JsonInventoryStore(
-        File('${applicationDirectory.path}/inventory.json'),
-      ),
+      inventoryStore: inventoryStore,
       nfcService: NfcManagerService(),
-      incomingLinkService: incomingLinkService,
+      incomingLinkService: AppLinksIncomingLinkService(),
     );
   }
 }

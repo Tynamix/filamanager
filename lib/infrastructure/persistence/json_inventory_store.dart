@@ -55,6 +55,17 @@ final class JsonInventoryStore implements InventoryStore {
     if (filamentSpoolsJson is! List) {
       throw const FormatException('Inventory filament spools must be a list.');
     }
+    final filamentSpools = [
+      for (final spoolJson in filamentSpoolsJson)
+        if (spoolJson is Map<String, dynamic>)
+          FilamentSpool.fromJson(spoolJson)
+        else
+          throw const FormatException('Invalid filament spool entry.'),
+    ];
+    if (filamentSpools.map((spool) => spool.id).toSet().length !=
+        filamentSpools.length) {
+      throw const FormatException('Duplicate filament-spool identity.');
+    }
     final inventory = InventoryDocument(
       schemaVersion: currentSchemaVersion,
       storageSlots: [
@@ -71,13 +82,7 @@ final class JsonInventoryStore implements InventoryStore {
           else
             throw const FormatException('Invalid material unit entry.'),
       ],
-      filamentSpools: [
-        for (final spoolJson in filamentSpoolsJson)
-          if (spoolJson is Map<String, dynamic>)
-            FilamentSpool.fromJson(spoolJson)
-          else
-            throw const FormatException('Invalid filament spool entry.'),
-      ],
+      filamentSpools: filamentSpools,
     );
     if (schemaVersion != currentSchemaVersion) {
       await save(inventory);
