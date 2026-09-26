@@ -2,6 +2,8 @@ import 'dart:async';
 
 import 'package:filamanager/app/app_dependencies.dart';
 import 'package:filamanager/app/fila_theme.dart';
+import 'package:filamanager/inventory/material_unit.dart';
+import 'package:filamanager/inventory/place_name.dart';
 import 'package:filamanager/inventory/storage_slot.dart';
 import 'package:filamanager/inventory/storage_slot_reference.dart';
 import 'package:filamanager/services/nfc_service.dart';
@@ -35,6 +37,7 @@ final class _InventoryShell extends StatefulWidget {
 final class _InventoryShellState extends State<_InventoryShell> {
   var _selectedIndex = 0;
   StorageSlot? _selectedStorageSlot;
+  MaterialUnit? _selectedMaterialUnit;
   String? _referenceError;
   late final StreamSubscription<NfcEvent> _nfcEvents;
   late final StreamSubscription<Uri> _incomingLinks;
@@ -129,13 +132,25 @@ final class _InventoryShellState extends State<_InventoryShell> {
             ? _StorageSlotContextView(
                 storageSlot: _selectedStorageSlot!,
                 onRegisterTag: () => _registerTag(_selectedStorageSlot!),
+                onEdit: _editStorageSlot,
+              )
+            : _selectedMaterialUnit != null
+            ? _MaterialUnitContextView(
+                materialUnit: _selectedMaterialUnit!,
+                onEdit: _editMaterialUnit,
               )
             : _referenceError != null
             ? _ReferenceErrorView(title: _referenceError!)
             : _PlacesView(
-                storageSlots: widget.dependencies.inventory.storageSlots,
-                onAddStorageSlot: _createStorageSlot,
+                storageSlots: widget.dependencies.inventory.storageSlots
+                    .where((slot) => !slot.archived)
+                    .toList(),
+                materialUnits: widget.dependencies.inventory.materialUnits
+                    .where((unit) => !unit.archived)
+                    .toList(),
+                onAddPlace: _createPlace,
                 onOpenStorageSlot: _openStorageSlot,
+                onOpenMaterialUnit: _openMaterialUnit,
               ),
       ),
       const _InventoryDestination(
@@ -153,14 +168,18 @@ final class _InventoryShellState extends State<_InventoryShell> {
       canPop:
           _selectedIndex == 0 &&
           _selectedStorageSlot == null &&
+          _selectedMaterialUnit == null &&
           _referenceError == null,
       onPopInvokedWithResult: (didPop, result) {
         if (didPop) {
           return;
         }
-        if (_selectedStorageSlot != null || _referenceError != null) {
+        if (_selectedStorageSlot != null ||
+            _selectedMaterialUnit != null ||
+            _referenceError != null) {
           setState(() {
             _selectedStorageSlot = null;
+            _selectedMaterialUnit = null;
             _referenceError = null;
           });
         } else if (_selectedIndex != 0) {
@@ -227,31 +246,121 @@ final class _InventoryShellState extends State<_InventoryShell> {
       _selectedIndex = index;
       if (index != 2) {
         _selectedStorageSlot = null;
+        _selectedMaterialUnit = null;
         _referenceError = null;
       }
     });
   }
 
-  Future<void> _createStorageSlot() async {
-    final name = await showModalBottomSheet<String>(
+  Future<void> _createPlace() async {
+    final kind = await showModalBottomSheet<_PlaceKind>(
       context: context,
       isScrollControlled: true,
-      builder: (context) => const _CreateStorageSlotSheet(),
+      builder: (context) => const _ChoosePlaceTypeSheet(),
     );
-    if (name == null || !mounted) {
-      return;
+    if (!mounted) return;
+    switch (kind) {
+      case _PlaceKind.storageSlot:
+        await _createStorageSlot();
+      case _PlaceKind.materialUnit:
+        await _createMaterialUnit();
+      case null:
+        break;
     }
+  }
 
-    final storageSlot = await widget.dependencies.createStorageSlot(name);
-    if (!mounted) {
+  Future<void> _createStorageSlot() async {
+    final storageSlot = await showModalBottomSheet<StorageSlot>(
+      context: context,
+      isScrollControlled: true,
+      builder: (context) => _StorageSlotSheet(
+        onSave: (name, area) =>
+            widget.dependencies.createStorageSlot(name, area: area),
+      ),
+    );
+    if (storageSlot == null || !mounted) {
       return;
     }
     setState(() => _selectedStorageSlot = storageSlot);
+    _showPlaceSaved('Storage slot created');
+  }
+
+  Future<void> _editStorageSlot() async {
+    final current = _selectedStorageSlot!;
+    final renamed = await showModalBottomSheet<StorageSlot>(
+      context: context,
+      isScrollControlled: true,
+      builder: (context) => _StorageSlotSheet(
+        initial: current,
+        onSave: (name, area) =>
+            widget.dependencies.renameStorageSlot(current.id, name, area: area),
+      ),
+    );
+    if (renamed != null && mounted) {
+      setState(() => _selectedStorageSlot = renamed);
+      _showPlaceSaved('Storage slot saved');
+    }
+  }
+
+  Future<void> _createMaterialUnit() async {
+    final unit = await showModalBottomSheet<MaterialUnit>(
+      context: context,
+      isScrollControlled: true,
+      builder: (context) => _MaterialUnitSheet(
+        onSave: (name, slots) =>
+            widget.dependencies.createMaterialUnit(name, slots),
+      ),
+    );
+    if (unit != null && mounted) {
+      setState(() => _selectedMaterialUnit = unit);
+      _showPlaceSaved('Material unit created');
+    }
+  }
+
+  Future<void> _editMaterialUnit() async {
+    final current = _selectedMaterialUnit!;
+    final renamed = await showModalBottomSheet<MaterialUnit>(
+      context: context,
+      isScrollControlled: true,
+      builder: (context) => _MaterialUnitSheet(
+        initial: current,
+        onSave: (name, slots) => widget.dependencies.renameMaterialUnit(
+          current.id,
+          name,
+          slotNames: {
+            for (var i = 0; i < current.slots.length; i++)
+              current.slots[i].id: slots[i],
+          },
+        ),
+      ),
+    );
+    if (renamed != null && mounted) {
+      setState(() => _selectedMaterialUnit = renamed);
+      _showPlaceSaved('Material unit saved');
+    }
+  }
+
+  void _showPlaceSaved(String message) {
+    final messenger = ScaffoldMessenger.of(context);
+    messenger
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(content: Semantics(liveRegion: true, child: Text(message))),
+      );
   }
 
   void _openStorageSlot(StorageSlot storageSlot) {
     setState(() {
       _selectedStorageSlot = storageSlot;
+      _selectedMaterialUnit = null;
+      _referenceError = null;
+    });
+  }
+
+  void _openMaterialUnit(MaterialUnit unit) {
+    setState(() {
+      _selectedMaterialUnit = unit;
+      _selectedStorageSlot = null;
       _referenceError = null;
     });
   }
@@ -275,6 +384,7 @@ final class _InventoryShellState extends State<_InventoryShell> {
     setState(() {
       _selectedIndex = 2;
       _selectedStorageSlot = storageSlot;
+      _selectedMaterialUnit = null;
       _referenceError = storageSlotId == null
           ? invalidReferenceTitle
           : storageSlot == null
@@ -290,6 +400,7 @@ final class _InventoryShellState extends State<_InventoryShell> {
     setState(() {
       _selectedIndex = 2;
       _selectedStorageSlot = null;
+      _selectedMaterialUnit = null;
       _referenceError = title;
     });
     _showInventoryUnchangedResult(title);
@@ -321,6 +432,7 @@ final class _InventoryShellState extends State<_InventoryShell> {
       context: context,
       isDismissible: false,
       enableDrag: false,
+      showDragHandle: false,
       builder: (context) => _WriteTagProgressSheet(
         result: resultFuture,
         onCancel: widget.dependencies.nfcService.cancelSession,
@@ -424,19 +536,104 @@ final class _ReferenceErrorView extends StatelessWidget {
   }
 }
 
-final class _PlacesView extends StatelessWidget {
-  const _PlacesView({
-    required this.storageSlots,
-    required this.onAddStorageSlot,
-    required this.onOpenStorageSlot,
-  });
+enum _PlaceKind { storageSlot, materialUnit }
 
-  final List<StorageSlot> storageSlots;
-  final Future<void> Function() onAddStorageSlot;
-  final ValueChanged<StorageSlot> onOpenStorageSlot;
+final class _ChoosePlaceTypeSheet extends StatelessWidget {
+  const _ChoosePlaceTypeSheet();
 
   @override
   Widget build(BuildContext context) {
+    return SafeArea(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.fromLTRB(20, 4, 20, 24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const _Eyebrow('New place'),
+            const SizedBox(height: 6),
+            Text(
+              'Choose place type',
+              style: Theme.of(context).textTheme.headlineMedium,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'What kind of position do you want to add?',
+              style: Theme.of(context).textTheme.bodyMedium,
+            ),
+            const SizedBox(height: 20),
+            _PlaceTypeTile(
+              icon: Icons.shelves,
+              title: 'Storage slot',
+              description: 'A permanent position for one filament spool',
+              onTap: () => Navigator.of(context).pop(_PlaceKind.storageSlot),
+            ),
+            const SizedBox(height: 12),
+            _PlaceTypeTile(
+              icon: Icons.view_module_outlined,
+              title: 'Material unit',
+              description: 'A holder with one or more material slots',
+              onTap: () => Navigator.of(context).pop(_PlaceKind.materialUnit),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+final class _PlaceTypeTile extends StatelessWidget {
+  const _PlaceTypeTile({
+    required this.icon,
+    required this.title,
+    required this.description,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String title;
+  final String description;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return _PrototypeCard(
+      child: Material(
+        color: Colors.transparent,
+        child: ListTile(
+          contentPadding: EdgeInsets.zero,
+          leading: Icon(icon, color: FilaColors.green),
+          title: Text(title, style: Theme.of(context).textTheme.titleMedium),
+          subtitle: Text(description),
+          trailing: const Icon(Icons.chevron_right),
+          onTap: onTap,
+        ),
+      ),
+    );
+  }
+}
+
+final class _PlacesView extends StatelessWidget {
+  const _PlacesView({
+    required this.storageSlots,
+    required this.materialUnits,
+    required this.onAddPlace,
+    required this.onOpenStorageSlot,
+    required this.onOpenMaterialUnit,
+  });
+
+  final List<StorageSlot> storageSlots;
+  final List<MaterialUnit> materialUnits;
+  final Future<void> Function() onAddPlace;
+  final ValueChanged<StorageSlot> onOpenStorageSlot;
+  final ValueChanged<MaterialUnit> onOpenMaterialUnit;
+
+  @override
+  Widget build(BuildContext context) {
+    final areas = <String, String?>{};
+    for (final slot in storageSlots) {
+      areas.putIfAbsent(placeNameKey(slot.area ?? ''), () => slot.area);
+    }
     return SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(18, 20, 18, 24),
       child: Align(
@@ -448,47 +645,83 @@ final class _PlacesView extends StatelessWidget {
             children: [
               const _Eyebrow('Local inventory'),
               const SizedBox(height: 4),
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      'Places',
-                      style: Theme.of(context).textTheme.displayMedium,
-                    ),
-                  ),
-                  FilledButton.icon(
-                    onPressed: onAddStorageSlot,
-                    icon: const Icon(Icons.add),
-                    label: const Text('Add storage slot'),
-                  ),
-                ],
+              Text('Places', style: Theme.of(context).textTheme.displayMedium),
+              const SizedBox(height: 16),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton.icon(
+                  onPressed: onAddPlace,
+                  icon: const Icon(Icons.add),
+                  label: const Text('Add place'),
+                ),
               ),
               const SizedBox(height: 20),
-              if (storageSlots.isEmpty)
+              if (storageSlots.isEmpty && materialUnits.isEmpty)
                 const _PrototypeCard(
                   child: _EmptyCardContent(
                     icon: Icons.shelves,
                     title: 'No storage slots or material units yet',
-                    message: 'Create a storage slot to get started.',
+                    message: 'Add a place to get started.',
                   ),
                 )
-              else
-                for (final storageSlot in storageSlots) ...[
-                  _PrototypeCard(
-                    child: Material(
-                      color: Colors.transparent,
-                      child: ListTile(
-                        contentPadding: EdgeInsets.zero,
-                        leading: const Icon(Icons.shelves),
-                        title: Text(storageSlot.name),
-                        subtitle: const Text('Storage slot · Empty'),
-                        trailing: const Icon(Icons.chevron_right),
-                        onTap: () => onOpenStorageSlot(storageSlot),
+              else ...[
+                if (storageSlots.isNotEmpty) const _Eyebrow('Storage slots'),
+                for (final area in areas.entries) ...[
+                  const SizedBox(height: 12),
+                  Text(
+                    area.value ?? 'No storage area',
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                  const SizedBox(height: 8),
+                  for (final storageSlot in storageSlots.where(
+                    (slot) => placeNameKey(slot.area ?? '') == area.key,
+                  )) ...[
+                    _PrototypeCard(
+                      child: Material(
+                        color: Colors.transparent,
+                        child: ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          leading: const Icon(Icons.shelves),
+                          title: Text(storageSlot.name),
+                          subtitle: Text(
+                            'Storage slot · ${storageSlot.archived
+                                ? 'Archived'
+                                : storageSlot.occupantId == null
+                                ? 'Empty'
+                                : 'Occupied'}',
+                          ),
+                          trailing: const Icon(Icons.chevron_right),
+                          onTap: () => onOpenStorageSlot(storageSlot),
+                        ),
                       ),
                     ),
-                  ),
-                  const SizedBox(height: 12),
+                    const SizedBox(height: 12),
+                  ],
                 ],
+                if (materialUnits.isNotEmpty) ...[
+                  const SizedBox(height: 16),
+                  const _Eyebrow('Material units'),
+                  const SizedBox(height: 12),
+                  for (final unit in materialUnits) ...[
+                    _PrototypeCard(
+                      child: Material(
+                        color: Colors.transparent,
+                        child: ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          leading: const Icon(Icons.view_module_outlined),
+                          title: Text(unit.name),
+                          subtitle: Text(
+                            '${unit.activeSlots.length} material ${unit.activeSlots.length == 1 ? 'slot' : 'slots'} · ${unit.archived ? 'Archived' : 'Active'}',
+                          ),
+                          trailing: const Icon(Icons.chevron_right),
+                          onTap: () => onOpenMaterialUnit(unit),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                  ],
+                ],
+              ],
             ],
           ),
         ),
@@ -501,10 +734,12 @@ final class _StorageSlotContextView extends StatelessWidget {
   const _StorageSlotContextView({
     required this.storageSlot,
     required this.onRegisterTag,
+    required this.onEdit,
   });
 
   final StorageSlot storageSlot;
   final Future<void> Function() onRegisterTag;
+  final Future<void> Function() onEdit;
 
   @override
   Widget build(BuildContext context) {
@@ -517,18 +752,32 @@ final class _StorageSlotContextView extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const _Eyebrow('Read-only storage-slot context'),
+              const _Eyebrow('Storage slot'),
               const SizedBox(height: 4),
               Text(
                 storageSlot.name,
                 style: Theme.of(context).textTheme.displayMedium,
               ),
+              const SizedBox(height: 10),
+              _PlaceStatusPill(archived: storageSlot.archived),
+              if (storageSlot.area != null) Text(storageSlot.area!),
               const SizedBox(height: 20),
-              const _PrototypeCard(
+              _PrototypeCard(
                 child: _EmptyCardContent(
                   icon: Icons.inventory_2_outlined,
-                  title: 'Empty',
-                  message: 'No filament spool occupies this storage slot.',
+                  title: storageSlot.occupantId == null ? 'Empty' : 'Occupied',
+                  message: storageSlot.occupantId == null
+                      ? 'No filament spool occupies this storage slot.'
+                      : 'A filament spool occupies this storage slot.',
+                ),
+              ),
+              const SizedBox(height: 16),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: onEdit,
+                  icon: const Icon(Icons.edit_outlined),
+                  label: const Text('Edit storage slot'),
                 ),
               ),
               const SizedBox(height: 16),
@@ -538,6 +787,64 @@ final class _StorageSlotContextView extends StatelessWidget {
                   onPressed: onRegisterTag,
                   icon: const Icon(Icons.nfc),
                   label: const Text('Register NFC tag'),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+final class _MaterialUnitContextView extends StatelessWidget {
+  const _MaterialUnitContextView({
+    required this.materialUnit,
+    required this.onEdit,
+  });
+
+  final MaterialUnit materialUnit;
+  final Future<void> Function() onEdit;
+
+  @override
+  Widget build(BuildContext context) {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.fromLTRB(18, 20, 18, 24),
+      child: Align(
+        alignment: Alignment.topCenter,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 620),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const _Eyebrow('Material unit'),
+              const SizedBox(height: 4),
+              Text(
+                materialUnit.name,
+                style: Theme.of(context).textTheme.displayMedium,
+              ),
+              const SizedBox(height: 10),
+              _PlaceStatusPill(archived: materialUnit.archived),
+              const SizedBox(height: 20),
+              for (final slot in materialUnit.activeSlots) ...[
+                _PrototypeCard(
+                  child: ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: const Icon(Icons.view_module_outlined),
+                    title: Text(slot.name),
+                    subtitle: Text(
+                      'Material slot · Active · ${slot.occupantId == null ? 'Empty' : 'Occupied'}',
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+              ],
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: onEdit,
+                  icon: const Icon(Icons.edit_outlined),
+                  label: const Text('Edit material unit'),
                 ),
               ),
             ],
@@ -652,22 +959,132 @@ final class _WriteTagProgressSheetState extends State<_WriteTagProgressSheet> {
   }
 }
 
-final class _CreateStorageSlotSheet extends StatefulWidget {
-  const _CreateStorageSlotSheet();
+final class _PlaceReview extends StatelessWidget {
+  const _PlaceReview({
+    required this.kind,
+    required this.nameLabel,
+    required this.name,
+    required this.creating,
+    required this.saving,
+    required this.details,
+    required this.onConfirm,
+    required this.onBack,
+  });
+
+  final String kind;
+  final String nameLabel;
+  final String name;
+  final bool creating;
+  final bool saving;
+  final List<Widget> details;
+  final VoidCallback onConfirm;
+  final VoidCallback onBack;
 
   @override
-  State<_CreateStorageSlotSheet> createState() =>
-      _CreateStorageSlotSheetState();
+  Widget build(BuildContext context) {
+    final action = creating ? 'Create' : 'Save';
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _Eyebrow('Review $kind'),
+        const SizedBox(height: 6),
+        Text(
+          '$action this $kind?',
+          style: Theme.of(context).textTheme.headlineMedium,
+        ),
+        const SizedBox(height: 18),
+        _PrototypeCard(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _Eyebrow(nameLabel),
+              const SizedBox(height: 4),
+              Text(name, style: Theme.of(context).textTheme.titleMedium),
+              ...details,
+            ],
+          ),
+        ),
+        const SizedBox(height: 12),
+        const Text('No inventory changes have been made.'),
+        const SizedBox(height: 18),
+        FilledButton(
+          onPressed: saving ? null : onConfirm,
+          child: Text('$action $kind'),
+        ),
+        TextButton(onPressed: onBack, child: const Text('Back to edit')),
+      ],
+    );
+  }
 }
 
-final class _CreateStorageSlotSheetState
-    extends State<_CreateStorageSlotSheet> {
-  final _nameController = TextEditingController();
+final class _PlaceSheetError extends StatelessWidget {
+  const _PlaceSheetError(this.message);
+
+  final String message;
+
+  @override
+  Widget build(BuildContext context) => Semantics(
+    container: true,
+    liveRegion: true,
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SizedBox(height: 12),
+        Text(
+          message,
+          style: TextStyle(color: Theme.of(context).colorScheme.error),
+        ),
+        const Text('No inventory changes were made.'),
+      ],
+    ),
+  );
+}
+
+Future<void> _submitPlace<T>({
+  required BuildContext context,
+  required Future<T> Function() save,
+  required void Function(String) onError,
+  required String kind,
+}) async {
+  try {
+    final result = await save();
+    if (context.mounted) Navigator.of(context).pop(result);
+  } on PlaceValidationException catch (error) {
+    if (context.mounted) onError(error.message);
+  } catch (_) {
+    if (context.mounted) onError('Could not save $kind. Try again.');
+  }
+}
+
+final class _StorageSlotSheet extends StatefulWidget {
+  const _StorageSlotSheet({this.initial, required this.onSave});
+
+  final StorageSlot? initial;
+  final Future<StorageSlot> Function(String name, String? area) onSave;
+
+  @override
+  State<_StorageSlotSheet> createState() => _StorageSlotSheetState();
+}
+
+final class _StorageSlotSheetState extends State<_StorageSlotSheet> {
+  late final TextEditingController _nameController;
+  late final TextEditingController _areaController;
   var _reviewing = false;
+  var _saving = false;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _nameController = TextEditingController(text: widget.initial?.name);
+    _areaController = TextEditingController(text: widget.initial?.area);
+  }
 
   @override
   void dispose() {
     _nameController.dispose();
+    _areaController.dispose();
     super.dispose();
   }
 
@@ -675,7 +1092,143 @@ final class _CreateStorageSlotSheetState
   Widget build(BuildContext context) {
     final name = _nameController.text.trim();
     return SafeArea(
-      child: Padding(
+      child: SingleChildScrollView(
+        child: Padding(
+          padding: EdgeInsets.fromLTRB(
+            20,
+            20,
+            20,
+            20 + MediaQuery.viewInsetsOf(context).bottom,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: _reviewing
+                ? [
+                    _PlaceReview(
+                      kind: 'storage slot',
+                      nameLabel: 'Storage-slot name',
+                      name: name,
+                      creating: widget.initial == null,
+                      saving: _saving,
+                      onConfirm: _submit,
+                      onBack: () => setState(() => _reviewing = false),
+                      details: [
+                        if (_areaController.text.trim().isNotEmpty) ...[
+                          const SizedBox(height: 12),
+                          const _Eyebrow('Storage area'),
+                          const SizedBox(height: 4),
+                          Text(_areaController.text.trim()),
+                        ],
+                      ],
+                    ),
+                  ]
+                : [
+                    const _Eyebrow('New place'),
+                    const SizedBox(height: 6),
+                    Text(
+                      widget.initial == null
+                          ? 'Create storage slot'
+                          : 'Edit storage slot',
+                      style: Theme.of(context).textTheme.headlineMedium,
+                    ),
+                    const SizedBox(height: 18),
+                    TextField(
+                      controller: _nameController,
+                      autofocus: true,
+                      decoration: const InputDecoration(
+                        labelText: 'Storage-slot name',
+                      ),
+                      onChanged: (_) => setState(() => _error = null),
+                      onSubmitted: name.isEmpty ? null : (_) => _review(),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: _areaController,
+                      decoration: const InputDecoration(
+                        labelText: 'Storage area (optional)',
+                      ),
+                      onChanged: (_) => setState(() => _error = null),
+                    ),
+                    if (_error != null) ...[_PlaceSheetError(_error!)],
+                    const SizedBox(height: 18),
+                    OutlinedButton(
+                      onPressed: _review,
+                      child: const Text('Review storage slot'),
+                    ),
+                  ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _review() {
+    if (_nameController.text.trim().isEmpty) {
+      setState(() => _error = 'Storage-slot name is required.');
+      return;
+    }
+    FocusScope.of(context).unfocus();
+    setState(() => _reviewing = true);
+  }
+
+  Future<void> _submit() async {
+    setState(() => _saving = true);
+    await _submitPlace(
+      context: context,
+      kind: 'storage slot',
+      save: () => widget.onSave(_nameController.text, _areaController.text),
+      onError: (message) => setState(() {
+        _error = message;
+        _reviewing = false;
+        _saving = false;
+      }),
+    );
+  }
+}
+
+final class _MaterialUnitSheet extends StatefulWidget {
+  const _MaterialUnitSheet({this.initial, required this.onSave});
+
+  final MaterialUnit? initial;
+  final Future<MaterialUnit> Function(String name, List<String> slots) onSave;
+
+  @override
+  State<_MaterialUnitSheet> createState() => _MaterialUnitSheetState();
+}
+
+final class _MaterialUnitSheetState extends State<_MaterialUnitSheet> {
+  late final TextEditingController _nameController;
+  late final List<TextEditingController> _slotControllers;
+  var _reviewing = false;
+  var _saving = false;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _nameController = TextEditingController(text: widget.initial?.name);
+    _slotControllers = widget.initial == null
+        ? [TextEditingController()]
+        : [
+            for (final slot in widget.initial!.slots)
+              TextEditingController(text: slot.name),
+          ];
+  }
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    for (final controller in _slotControllers) {
+      controller.dispose();
+    }
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      child: SingleChildScrollView(
         padding: EdgeInsets.fromLTRB(
           20,
           20,
@@ -687,59 +1240,79 @@ final class _CreateStorageSlotSheetState
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: _reviewing
               ? [
-                  const _Eyebrow('Review storage slot'),
-                  const SizedBox(height: 6),
-                  Text(
-                    'Create this storage slot?',
-                    style: Theme.of(context).textTheme.headlineMedium,
-                  ),
-                  const SizedBox(height: 18),
-                  _PrototypeCard(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const _Eyebrow('Storage-slot name'),
+                  _PlaceReview(
+                    kind: 'material unit',
+                    nameLabel: 'Material-unit name',
+                    name: _nameController.text.trim(),
+                    creating: widget.initial == null,
+                    saving: _saving,
+                    onConfirm: _submit,
+                    onBack: () => setState(() => _reviewing = false),
+                    details: [
+                      const SizedBox(height: 12),
+                      const _Eyebrow('Material slots'),
+                      for (final controller in _slotControllers) ...[
                         const SizedBox(height: 4),
-                        Text(
-                          name,
-                          style: Theme.of(context).textTheme.titleMedium,
-                        ),
+                        Text(controller.text.trim()),
                       ],
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  const Text('No inventory changes have been made.'),
-                  const SizedBox(height: 18),
-                  FilledButton(
-                    onPressed: _submit,
-                    child: const Text('Create storage slot'),
-                  ),
-                  TextButton(
-                    onPressed: () => setState(() => _reviewing = false),
-                    child: const Text('Back to edit'),
+                    ],
                   ),
                 ]
               : [
-                  const _Eyebrow('New place'),
+                  const _Eyebrow('Places'),
                   const SizedBox(height: 6),
                   Text(
-                    'Create storage slot',
+                    widget.initial == null
+                        ? 'Create material unit'
+                        : 'Edit material unit',
                     style: Theme.of(context).textTheme.headlineMedium,
                   ),
                   const SizedBox(height: 18),
                   TextField(
                     controller: _nameController,
-                    autofocus: true,
                     decoration: const InputDecoration(
-                      labelText: 'Storage-slot name',
+                      labelText: 'Material-unit name',
                     ),
-                    onChanged: (_) => setState(() {}),
-                    onSubmitted: name.isEmpty ? null : (_) => _review(),
+                    onChanged: (_) => setState(() => _error = null),
                   ),
+                  const SizedBox(height: 16),
+                  const _Eyebrow('Material slots'),
+                  const SizedBox(height: 8),
+                  for (
+                    var index = 0;
+                    index < _slotControllers.length;
+                    index++
+                  ) ...[
+                    TextField(
+                      controller: _slotControllers[index],
+                      decoration: InputDecoration(
+                        labelText: 'Material-slot name ${index + 1}',
+                      ),
+                      onChanged: (_) => setState(() => _error = null),
+                    ),
+                    const SizedBox(height: 8),
+                  ],
+                  if (widget.initial == null) ...[
+                    TextButton.icon(
+                      onPressed: () => setState(
+                        () => _slotControllers.add(TextEditingController()),
+                      ),
+                      icon: const Icon(Icons.add),
+                      label: const Text('Add material slot'),
+                    ),
+                    if (_slotControllers.length > 1)
+                      TextButton(
+                        onPressed: () => setState(
+                          () => _slotControllers.removeLast().dispose(),
+                        ),
+                        child: const Text('Remove last slot'),
+                      ),
+                  ],
+                  if (_error != null) ...[_PlaceSheetError(_error!)],
                   const SizedBox(height: 18),
                   OutlinedButton(
-                    onPressed: name.isEmpty ? null : _review,
-                    child: const Text('Review storage slot'),
+                    onPressed: _review,
+                    child: const Text('Review material unit'),
                   ),
                 ],
         ),
@@ -748,15 +1321,31 @@ final class _CreateStorageSlotSheetState
   }
 
   void _review() {
+    if (_nameController.text.trim().isEmpty ||
+        _slotControllers.any((controller) => controller.text.trim().isEmpty)) {
+      setState(
+        () => _error = 'Name the material unit and every material slot.',
+      );
+      return;
+    }
     FocusScope.of(context).unfocus();
     setState(() => _reviewing = true);
   }
 
-  void _submit() {
-    final name = _nameController.text.trim();
-    if (name.isNotEmpty) {
-      Navigator.of(context).pop(name);
-    }
+  Future<void> _submit() async {
+    setState(() => _saving = true);
+    await _submitPlace(
+      context: context,
+      kind: 'material unit',
+      save: () => widget.onSave(_nameController.text, [
+        for (final controller in _slotControllers) controller.text,
+      ]),
+      onError: (message) => setState(() {
+        _error = message;
+        _reviewing = false;
+        _saving = false;
+      }),
+    );
   }
 }
 
@@ -773,8 +1362,10 @@ final class _CompactNavigation extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final labelHeight = MediaQuery.textScalerOf(context).scale(11) * 1.6;
+    final twoLineHeight = 20 + 3 + labelHeight * 2 + 12;
     return Container(
-      height: 70,
+      height: twoLineHeight > 70 ? twoLineHeight : 70,
       padding: const EdgeInsets.all(6),
       decoration: BoxDecoration(
         color: Colors.white.withValues(alpha: 0.96),
@@ -841,6 +1432,8 @@ final class _CompactDestinationButton extends StatelessWidget {
                 const SizedBox(height: 3),
                 Text(
                   destination.label,
+                  maxLines: 2,
+                  textAlign: TextAlign.center,
                   style: TextStyle(
                     color: color,
                     fontSize: 11,
@@ -1159,6 +1752,38 @@ final class _Eyebrow extends StatelessWidget {
         fontSize: 11,
         fontWeight: FontWeight.w800,
         letterSpacing: 1.1,
+      ),
+    );
+  }
+}
+
+final class _PlaceStatusPill extends StatelessWidget {
+  const _PlaceStatusPill({required this.archived});
+
+  final bool archived;
+
+  @override
+  Widget build(BuildContext context) {
+    final label = archived ? 'Archived' : 'Active';
+    return Semantics(
+      label: 'Place status: $label',
+      child: ExcludeSemantics(
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+          decoration: BoxDecoration(
+            color: archived ? FilaColors.canvas : FilaColors.greenLight,
+            borderRadius: BorderRadius.circular(999),
+            border: Border.all(color: FilaColors.line),
+          ),
+          child: Text(
+            label,
+            style: TextStyle(
+              color: archived ? FilaColors.muted : FilaColors.green,
+              fontWeight: FontWeight.w800,
+              fontSize: 12,
+            ),
+          ),
+        ),
       ),
     );
   }

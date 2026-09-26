@@ -1,13 +1,14 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:filamanager/inventory/material_unit.dart';
 import 'package:filamanager/inventory/storage_slot.dart';
 import 'package:filamanager/persistence/inventory_store.dart';
 
 final class JsonInventoryStore implements InventoryStore {
   JsonInventoryStore(this.file);
 
-  static const currentSchemaVersion = 1;
+  static const currentSchemaVersion = 2;
 
   final File file;
   Future<InventoryDocument>? _opening;
@@ -29,7 +30,8 @@ final class JsonInventoryStore implements InventoryStore {
     }
 
     final schemaVersion = decoded['schemaVersion'];
-    if (schemaVersion is! int || schemaVersion != currentSchemaVersion) {
+    if (schemaVersion is! int ||
+        (schemaVersion != 1 && schemaVersion != currentSchemaVersion)) {
       throw FormatException('Unsupported inventory schema: $schemaVersion');
     }
 
@@ -37,15 +39,26 @@ final class JsonInventoryStore implements InventoryStore {
     if (storageSlotsJson is! List) {
       throw const FormatException('Inventory storage slots must be a list.');
     }
+    final materialUnitsJson = decoded['materialUnits'] ?? const <Object>[];
+    if (materialUnitsJson is! List) {
+      throw const FormatException('Inventory material units must be a list.');
+    }
 
     return InventoryDocument(
-      schemaVersion: schemaVersion,
+      schemaVersion: currentSchemaVersion,
       storageSlots: [
         for (final storageSlotJson in storageSlotsJson)
           if (storageSlotJson is Map<String, dynamic>)
             StorageSlot.fromJson(storageSlotJson)
           else
             throw const FormatException('Invalid storage slot entry.'),
+      ],
+      materialUnits: [
+        for (final unitJson in materialUnitsJson)
+          if (unitJson is Map<String, dynamic>)
+            MaterialUnit.fromJson(unitJson)
+          else
+            throw const FormatException('Invalid material unit entry.'),
       ],
     );
   }
@@ -55,9 +68,12 @@ final class JsonInventoryStore implements InventoryStore {
     await file.parent.create(recursive: true);
     final temporaryFile = File('${file.path}.tmp');
     final contents = jsonEncode(<String, Object>{
-      'schemaVersion': inventory.schemaVersion,
+      'schemaVersion': currentSchemaVersion,
       'storageSlots': [
         for (final storageSlot in inventory.storageSlots) storageSlot.toJson(),
+      ],
+      'materialUnits': [
+        for (final unit in inventory.materialUnits) unit.toJson(),
       ],
     });
     await temporaryFile.writeAsString(contents, flush: true);
