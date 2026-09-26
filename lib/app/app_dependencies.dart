@@ -43,8 +43,7 @@ final class AppDependencies {
     final updatedInventory = inventory.copyWith(
       storageSlots: [...inventory.storageSlots, storageSlot],
     );
-    await inventoryStore.save(updatedInventory);
-    inventory = updatedInventory;
+    await _saveInventory(updatedInventory);
     return storageSlot;
   }
 
@@ -72,8 +71,7 @@ final class AppDependencies {
     final slots = [...inventory.storageSlots];
     slots[index] = renamed;
     final updatedInventory = inventory.copyWith(storageSlots: slots);
-    await inventoryStore.save(updatedInventory);
-    inventory = updatedInventory;
+    await _saveInventory(updatedInventory);
     return renamed;
   }
 
@@ -109,8 +107,7 @@ final class AppDependencies {
     final updatedInventory = inventory.copyWith(
       materialUnits: [...inventory.materialUnits, unit],
     );
-    await inventoryStore.save(updatedInventory);
-    inventory = updatedInventory;
+    await _saveInventory(updatedInventory);
     return unit;
   }
 
@@ -155,9 +152,13 @@ final class AppDependencies {
     final units = [...inventory.materialUnits];
     units[index] = renamed;
     final updatedInventory = inventory.copyWith(materialUnits: units);
-    await inventoryStore.save(updatedInventory);
-    inventory = updatedInventory;
+    await _saveInventory(updatedInventory);
     return renamed;
+  }
+
+  Future<void> _saveInventory(InventoryDocument updated) async {
+    await inventoryStore.save(updated);
+    inventory = updated;
   }
 
   bool _hasActiveStorageName(
