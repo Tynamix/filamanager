@@ -55,11 +55,13 @@ jobs:
             changed lines, severity, and a suggested fix. Do not report speculative
             issues or issues already enforced by tooling.
 
-            After every subagent finishes, publish one PR review summary with:
+            After every subagent finishes, return one final review summary with:
             - Risk level and brief justification.
             - Review dimensions and subagents run.
             - Overall verdict: APPROVED, REQUEST CHANGES, or COMMENT.
             - Critical blockers, recommended improvements, and optional nits.
             - For each finding, a file:line location and concrete suggested fix.
             Say explicitly when a section has no findings. Base the verdict on the
-            findings, and do not claim checks were run unless you ran them.
+            findings, and do not claim checks were run unless you ran them. The
+            OpenCode action posts your final response as a PR comment; do not
+            post another comment or submit a formal GitHub review yourself.

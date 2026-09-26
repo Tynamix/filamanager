@@ -67,7 +67,7 @@ external events repeatable.
 
 The `OpenCode PR review` GitHub Action reviews same-repository pull requests
 when they are opened, updated, reopened, or marked ready for review. It skips
-Renovate and fork pull requests. Add an `OPENROUTER_API_KEY` Actions secret in
-the GitHub repository settings to enable it. The workflow uses the OpenRouter
-model and pinned OpenCode action specified in
+Renovate and fork pull requests. Its verdict appears in a PR comment. Add an
+`OPENROUTER_API_KEY` Actions secret in the GitHub repository settings to enable
+it. The workflow uses the OpenRouter model and pinned OpenCode action in
 [`.github/workflows/opencode-review.yml`](.github/workflows/opencode-review.yml).
