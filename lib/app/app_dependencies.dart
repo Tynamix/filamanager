@@ -3,6 +3,8 @@ import 'dart:math';
 
 import 'package:filamanager/inventory/storage_slot.dart';
 import 'package:filamanager/inventory/storage_slot_id.dart';
+import 'package:filamanager/inventory/material_unit.dart';
+import 'package:filamanager/inventory/place_id.dart';
 import 'package:filamanager/persistence/inventory_store.dart';
 import 'package:filamanager/services/incoming_link_service.dart';
 import 'package:filamanager/services/nfc_service.dart';
@@ -24,10 +26,23 @@ final class AppDependencies {
   final Uri? initialIncomingLink;
   final StorageSlotId Function() _storageSlotIdGenerator;
 
-  Future<StorageSlot> createStorageSlot(String name) async {
+  Future<StorageSlot> createStorageSlot(String name, {String? area}) async {
+    final displayName = _validName(name, 'Storage-slot name');
+    final displayArea = _optionalArea(area);
+    if (inventory.storageSlots.any(
+      (slot) =>
+          !slot.archived &&
+          _key(slot.name) == _key(displayName) &&
+          _key(slot.area ?? '') == _key(displayArea ?? ''),
+    )) {
+      throw const PlaceValidationException(
+        'A storage slot with this name already exists in this storage area.',
+      );
+    }
     final storageSlot = StorageSlot(
       id: _storageSlotIdGenerator(),
-      name: name.trim(),
+      name: displayName,
+      area: displayArea,
     );
     final updatedInventory = inventory.copyWith(
       storageSlots: [...inventory.storageSlots, storageSlot],
@@ -35,6 +50,152 @@ final class AppDependencies {
     await inventoryStore.save(updatedInventory);
     inventory = updatedInventory;
     return storageSlot;
+  }
+
+  Future<StorageSlot> renameStorageSlot(
+    StorageSlotId id,
+    String name, {
+    String? area,
+  }) async {
+    final displayName = _validName(name, 'Storage-slot name');
+    final displayArea = _optionalArea(area);
+    final index = inventory.storageSlots.indexWhere((slot) => slot.id == id);
+    if (index < 0) {
+      throw const PlaceValidationException('Storage slot no longer exists.');
+    }
+    if (!inventory.storageSlots[index].archived &&
+        inventory.storageSlots.any(
+          (slot) =>
+              slot.id != id &&
+              !slot.archived &&
+              _key(slot.name) == _key(displayName) &&
+              _key(slot.area ?? '') == _key(displayArea ?? ''),
+        )) {
+      throw const PlaceValidationException(
+        'A storage slot with this name already exists in this storage area.',
+      );
+    }
+    final renamed = inventory.storageSlots[index].copyWith(
+      name: displayName,
+      area: displayArea,
+    );
+    final slots = [...inventory.storageSlots];
+    slots[index] = renamed;
+    final updatedInventory = inventory.copyWith(storageSlots: slots);
+    await inventoryStore.save(updatedInventory);
+    inventory = updatedInventory;
+    return renamed;
+  }
+
+  Future<MaterialUnit> createMaterialUnit(
+    String name,
+    List<String> slotNames,
+  ) async {
+    final displayName = _validName(name, 'Material-unit name');
+    if (slotNames.isEmpty) {
+      throw const PlaceValidationException('Add at least one material slot.');
+    }
+    if (inventory.materialUnits.any(
+      (unit) => !unit.archived && _key(unit.name) == _key(displayName),
+    )) {
+      throw const PlaceValidationException(
+        'A material unit with this name already exists.',
+      );
+    }
+    final names = slotNames
+        .map((slot) => _validName(slot, 'Material-slot name'))
+        .toList();
+    if (names.map(_key).toSet().length != names.length) {
+      throw const PlaceValidationException(
+        'Material-slot names must be unique within the material unit.',
+      );
+    }
+    final unit = MaterialUnit(
+      id: PlaceId.parse(_newOpaqueId().value),
+      name: displayName,
+      slots: [
+        for (final slotName in names)
+          MaterialSlot(id: PlaceId.parse(_newOpaqueId().value), name: slotName),
+      ],
+    );
+    final updatedInventory = inventory.copyWith(
+      materialUnits: [...inventory.materialUnits, unit],
+    );
+    await inventoryStore.save(updatedInventory);
+    inventory = updatedInventory;
+    return unit;
+  }
+
+  Future<MaterialUnit> renameMaterialUnit(
+    PlaceId id,
+    String name, {
+    Map<PlaceId, String> slotNames = const {},
+  }) async {
+    final displayName = _validName(name, 'Material-unit name');
+    final index = inventory.materialUnits.indexWhere((unit) => unit.id == id);
+    if (index < 0) {
+      throw const PlaceValidationException('Material unit no longer exists.');
+    }
+    if (!inventory.materialUnits[index].archived &&
+        inventory.materialUnits.any(
+          (unit) =>
+              unit.id != id &&
+              !unit.archived &&
+              _key(unit.name) == _key(displayName),
+        )) {
+      throw const PlaceValidationException(
+        'A material unit with this name already exists.',
+      );
+    }
+    final original = inventory.materialUnits[index];
+    if (slotNames.keys.any(
+      (slotId) => !original.slots.any((slot) => slot.id == slotId),
+    )) {
+      throw const PlaceValidationException('Material slot no longer exists.');
+    }
+    final slots = [
+      for (final slot in original.slots)
+        slot.renamed(
+          _validName(slotNames[slot.id] ?? slot.name, 'Material-slot name'),
+        ),
+    ];
+    final activeNames = [
+      for (final slot in slots)
+        if (!slot.archived) _key(slot.name),
+    ];
+    if (activeNames.toSet().length != activeNames.length) {
+      throw const PlaceValidationException(
+        'Material-slot names must be unique within the material unit.',
+      );
+    }
+    final renamed = original.renamed(displayName, slots);
+    final units = [...inventory.materialUnits];
+    units[index] = renamed;
+    final updatedInventory = inventory.copyWith(materialUnits: units);
+    await inventoryStore.save(updatedInventory);
+    inventory = updatedInventory;
+    return renamed;
+  }
+
+  static String _key(String value) => value.trim().toLowerCase();
+
+  static String _validName(String value, String label) {
+    final name = value.trim();
+    if (name.isEmpty) {
+      throw PlaceValidationException('$label is required.');
+    }
+    if (name.length > 80 ||
+        name.runes.any((rune) => rune < 32 || rune == 127)) {
+      throw PlaceValidationException(
+        '$label must be at most 80 characters without control characters.',
+      );
+    }
+    return name;
+  }
+
+  static String? _optionalArea(String? area) {
+    if (area == null || area.trim().isEmpty) return null;
+    return _validName(area, 'Storage area');
   }
 
   static StorageSlotId _newOpaqueId() {
@@ -61,4 +222,12 @@ final class AppDependencies {
       storageSlotIdGenerator: storageSlotIdGenerator,
     );
   }
+}
+
+final class PlaceValidationException implements Exception {
+  const PlaceValidationException(this.message);
+  final String message;
+
+  @override
+  String toString() => message;
 }
