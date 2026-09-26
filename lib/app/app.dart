@@ -4,6 +4,8 @@ import 'package:filamanager/app/app_dependencies.dart';
 import 'package:filamanager/app/fila_theme.dart';
 import 'package:filamanager/inventory/material_unit.dart';
 import 'package:filamanager/inventory/place_name.dart';
+import 'package:filamanager/app/spools_view.dart';
+import 'package:filamanager/inventory/filament_spool.dart';
 import 'package:filamanager/inventory/storage_slot.dart';
 import 'package:filamanager/inventory/storage_slot_reference.dart';
 import 'package:filamanager/services/nfc_service.dart';
@@ -38,6 +40,7 @@ final class _InventoryShellState extends State<_InventoryShell> {
   var _selectedIndex = 0;
   StorageSlot? _selectedStorageSlot;
   MaterialUnit? _selectedMaterialUnit;
+  FilamentSpool? _selectedFilamentSpool;
   String? _referenceError;
   late final StreamSubscription<NfcEvent> _nfcEvents;
   late final StreamSubscription<Uri> _incomingLinks;
@@ -114,16 +117,28 @@ final class _InventoryShellState extends State<_InventoryShell> {
         content: _HomeView(
           onScan: widget.dependencies.nfcService.scan,
           onShowAll: () => _selectDestination(1),
+          spools: widget.dependencies.inventory.filamentSpools,
+          onOpenSpool: (spool) => setState(() {
+            _selectedIndex = 1;
+            _selectedFilamentSpool = spool;
+          }),
         ),
       ),
-      const _InventoryDestination(
+      _InventoryDestination(
         icon: Icons.album_outlined,
         label: 'Spools',
-        content: _EmptyArea(
-          icon: Icons.album_outlined,
-          title: 'Spools',
-          message: 'No active filament spools yet',
-        ),
+        content: _selectedFilamentSpool != null
+            ? SpoolDetailsView(
+                spool: _selectedFilamentSpool!,
+                onBack: () => setState(() => _selectedFilamentSpool = null),
+                onEdit: _editSpoolDetails,
+              )
+            : SpoolsView(
+                spools: widget.dependencies.inventory.filamentSpools,
+                onAddSpool: _registerFilamentSpool,
+                onOpenSpool: (spool) =>
+                    setState(() => _selectedFilamentSpool = spool),
+              ),
       ),
       _InventoryDestination(
         icon: Icons.shelves,
@@ -169,12 +184,15 @@ final class _InventoryShellState extends State<_InventoryShell> {
           _selectedIndex == 0 &&
           _selectedStorageSlot == null &&
           _selectedMaterialUnit == null &&
+          _selectedFilamentSpool == null &&
           _referenceError == null,
       onPopInvokedWithResult: (didPop, result) {
         if (didPop) {
           return;
         }
-        if (_selectedStorageSlot != null ||
+        if (_selectedFilamentSpool != null) {
+          setState(() => _selectedFilamentSpool = null);
+        } else if (_selectedStorageSlot != null ||
             _selectedMaterialUnit != null ||
             _referenceError != null) {
           setState(() {
@@ -249,7 +267,74 @@ final class _InventoryShellState extends State<_InventoryShell> {
         _selectedMaterialUnit = null;
         _referenceError = null;
       }
+      if (index != 1) {
+        _selectedFilamentSpool = null;
+      }
     });
+  }
+
+  Future<void> _registerFilamentSpool() async {
+    final registration = await showModalBottomSheet<SpoolRegistration>(
+      context: context,
+      isScrollControlled: true,
+      builder: (context) => const RegisterSpoolSheet(),
+    );
+    if (!mounted) {
+      return;
+    }
+    if (registration == null) {
+      _showInventoryUnchangedResult('Registration cancelled');
+      return;
+    }
+    try {
+      final spool = await widget.dependencies.registerUnlocatedSpool(
+        registration,
+      );
+      if (!mounted) return;
+      setState(() => _selectedFilamentSpool = spool);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Semantics(
+            liveRegion: true,
+            child: Text('Filament spool registered'),
+          ),
+        ),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Could not register filament spool. Try again.'),
+        ),
+      );
+    }
+  }
+
+  Future<void> _editSpoolDetails() async {
+    final spool = _selectedFilamentSpool;
+    if (spool == null) return;
+    final updated = await showModalBottomSheet<SpoolRegistration>(
+      context: context,
+      isScrollControlled: true,
+      builder: (context) => RegisterSpoolSheet(editingSpool: spool),
+    );
+    if (updated == null || !mounted) return;
+    try {
+      final saved = await widget.dependencies.editSpoolDetails(
+        spool.id,
+        updated.description,
+      );
+      if (!mounted) return;
+      setState(() => _selectedFilamentSpool = saved);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Filament spool details saved')),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not save details. Try again.')),
+      );
+    }
   }
 
   Future<void> _createPlace() async {
@@ -1538,10 +1623,17 @@ final class _InventoryDestination {
 }
 
 final class _HomeView extends StatelessWidget {
-  const _HomeView({required this.onScan, required this.onShowAll});
+  const _HomeView({
+    required this.onScan,
+    required this.onShowAll,
+    required this.spools,
+    required this.onOpenSpool,
+  });
 
   final Future<void> Function() onScan;
   final VoidCallback onShowAll;
+  final List<FilamentSpool> spools;
+  final ValueChanged<FilamentSpool> onOpenSpool;
 
   @override
   Widget build(BuildContext context) {
@@ -1591,13 +1683,38 @@ final class _HomeView extends StatelessWidget {
                 ],
               ),
               const SizedBox(height: 10),
-              const _PrototypeCard(
-                child: _EmptyCardContent(
-                  icon: Icons.album_outlined,
-                  title: 'No active filament spools yet',
-                  message: 'Registered filament spools will appear here.',
-                ),
-              ),
+              if (spools.isEmpty)
+                const _PrototypeCard(
+                  child: _EmptyCardContent(
+                    icon: Icons.album_outlined,
+                    title: 'No active filament spools yet',
+                    message: 'Registered filament spools will appear here.',
+                  ),
+                )
+              else
+                for (final spool in spools.take(3)) ...[
+                  SpoolCard(
+                    child: Material(
+                      color: Colors.transparent,
+                      child: ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        leading: SpoolSwatch(
+                          color: spool.description.filamentColor,
+                        ),
+                        title: Text(
+                          spool.description.spoolLabel ??
+                              spool.description.materialType,
+                        ),
+                        subtitle: Text(
+                          '${spool.description.materialType} · Unlocated · ${spool.remainingGrams} g',
+                        ),
+                        trailing: const Icon(Icons.chevron_right),
+                        onTap: () => onOpenSpool(spool),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                ],
             ],
           ),
         ),

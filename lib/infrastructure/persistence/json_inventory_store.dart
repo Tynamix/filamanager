@@ -2,13 +2,14 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:filamanager/inventory/material_unit.dart';
+import 'package:filamanager/inventory/filament_spool.dart';
 import 'package:filamanager/inventory/storage_slot.dart';
 import 'package:filamanager/persistence/inventory_store.dart';
 
 final class JsonInventoryStore implements InventoryStore {
   JsonInventoryStore(this.file);
 
-  static const currentSchemaVersion = 2;
+  static const currentSchemaVersion = 3;
 
   final File file;
   Future<InventoryDocument>? _opening;
@@ -31,20 +32,30 @@ final class JsonInventoryStore implements InventoryStore {
 
     final schemaVersion = decoded['schemaVersion'];
     if (schemaVersion is! int ||
-        (schemaVersion != 1 && schemaVersion != currentSchemaVersion)) {
+        (schemaVersion != 1 &&
+            schemaVersion != 2 &&
+            schemaVersion != currentSchemaVersion)) {
       throw FormatException('Unsupported inventory schema: $schemaVersion');
     }
 
-    final storageSlotsJson = decoded['storageSlots'] ?? const <Object>[];
+    final storageSlotsJson = decoded['storageSlots'];
     if (storageSlotsJson is! List) {
       throw const FormatException('Inventory storage slots must be a list.');
     }
-    final materialUnitsJson = decoded['materialUnits'] ?? const <Object>[];
+    final materialUnitsJson = schemaVersion == 1
+        ? const <Object>[]
+        : decoded['materialUnits'];
     if (materialUnitsJson is! List) {
       throw const FormatException('Inventory material units must be a list.');
     }
 
-    return InventoryDocument(
+    final filamentSpoolsJson = schemaVersion < currentSchemaVersion
+        ? const <Object>[]
+        : decoded['filamentSpools'];
+    if (filamentSpoolsJson is! List) {
+      throw const FormatException('Inventory filament spools must be a list.');
+    }
+    final inventory = InventoryDocument(
       schemaVersion: currentSchemaVersion,
       storageSlots: [
         for (final storageSlotJson in storageSlotsJson)
@@ -60,7 +71,18 @@ final class JsonInventoryStore implements InventoryStore {
           else
             throw const FormatException('Invalid material unit entry.'),
       ],
+      filamentSpools: [
+        for (final spoolJson in filamentSpoolsJson)
+          if (spoolJson is Map<String, dynamic>)
+            FilamentSpool.fromJson(spoolJson)
+          else
+            throw const FormatException('Invalid filament spool entry.'),
+      ],
     );
+    if (schemaVersion != currentSchemaVersion) {
+      await save(inventory);
+    }
+    return inventory;
   }
 
   @override
@@ -74,6 +96,9 @@ final class JsonInventoryStore implements InventoryStore {
       ],
       'materialUnits': [
         for (final unit in inventory.materialUnits) unit.toJson(),
+      ],
+      'filamentSpools': [
+        for (final spool in inventory.filamentSpools) spool.toJson(),
       ],
     });
     await temporaryFile.writeAsString(contents, flush: true);

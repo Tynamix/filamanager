@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:math';
 
+import 'package:filamanager/inventory/filament_spool.dart';
 import 'package:filamanager/inventory/storage_slot.dart';
 import 'package:filamanager/inventory/storage_slot_id.dart';
 import 'package:filamanager/inventory/material_unit.dart';
@@ -206,10 +207,49 @@ final class AppDependencies {
     return _validName(area, 'Storage area');
   }
 
+  Future<FilamentSpool> registerUnlocatedSpool(
+    SpoolRegistration registration,
+  ) async {
+    final spool = FilamentSpool.registerUnlocated(
+      id: FilamentSpoolId.parse(_newOpaqueToken()),
+      registration: registration,
+      occurredAt: DateTime.now().toUtc(),
+    );
+    final updatedInventory = inventory.copyWith(
+      filamentSpools: [...inventory.filamentSpools, spool],
+    );
+    await _saveInventory(updatedInventory);
+    return spool;
+  }
+
+  Future<FilamentSpool> editSpoolDetails(
+    FilamentSpoolId id,
+    SpoolDescription description,
+  ) async {
+    final index = inventory.filamentSpools.indexWhere(
+      (spool) => spool.id == id,
+    );
+    if (index < 0) {
+      throw StateError('Filament spool no longer exists.');
+    }
+    final updatedSpool = inventory.filamentSpools[index].withDescription(
+      description,
+    );
+    final updatedSpools = [...inventory.filamentSpools];
+    updatedSpools[index] = updatedSpool;
+    final updatedInventory = inventory.copyWith(filamentSpools: updatedSpools);
+    await _saveInventory(updatedInventory);
+    return updatedSpool;
+  }
+
   static StorageSlotId _newOpaqueId() {
+    return StorageSlotId.parse(_newOpaqueToken());
+  }
+
+  static String _newOpaqueToken() {
     final random = Random.secure();
     final bytes = List<int>.generate(16, (_) => random.nextInt(256));
-    return StorageSlotId.parse(base64UrlEncode(bytes).replaceAll('=', ''));
+    return base64UrlEncode(bytes).replaceAll('=', '');
   }
 
   static Future<AppDependencies> initialize({

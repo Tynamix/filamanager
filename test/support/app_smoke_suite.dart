@@ -470,6 +470,352 @@ void appSmokeSuite({bool useProductionStore = false}) {
     expect(find.text('Scan a storage-slot tag'), findsOneWidget);
   });
 
+  testWidgets(
+    'registers an Unlocated filament spool and finds it after restart',
+    (tester) async {
+      await _launchApp(
+        tester,
+        inventoryStoreFactory,
+        nfcService,
+        incomingLinkService,
+      );
+      await tester.tap(find.text('Spools'));
+      await _pumpInteraction(tester);
+      await tester.tap(find.text('Add filament spool'));
+      await _pumpInteraction(tester);
+
+      await tester.tap(find.text('PLA'));
+      await tester.enterText(
+        find.bySemanticsLabel('Filament color (#RRGGBB)'),
+        '#22aa88',
+      );
+      await tester.enterText(
+        find.bySemanticsLabel('Remaining quantity (g)'),
+        '750',
+      );
+      await tester.tap(find.text('Review filament spool'));
+      await _pumpInteraction(tester);
+      expect(find.text('Unlocated'), findsWidgets);
+      expect(find.text('No assignment'), findsWidgets);
+
+      await _confirmSpoolRegistration(tester);
+      expect(find.text('Filament spool registered'), findsOneWidget);
+      expect(find.text('750 g'), findsWidgets);
+      expect(find.text('Registered'), findsOneWidget);
+      expect(find.text('Affected: this filament spool'), findsOneWidget);
+      expect(find.text('Before: not registered'), findsOneWidget);
+      expect(
+        find.text('After: Unlocated · 750 g · no assignment'),
+        findsOneWidget,
+      );
+
+      await tester.tap(find.text('Home'));
+      await _pumpInteraction(tester);
+      expect(find.text('No active filament spools yet'), findsNothing);
+      expect(find.text('PLA'), findsWidgets);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await _pumpInteraction(tester);
+      await _launchApp(
+        tester,
+        inventoryStoreFactory,
+        nfcService,
+        incomingLinkService,
+      );
+      await tester.tap(find.text('Spools'));
+      await _pumpInteraction(tester);
+      expect(find.text('PLA'), findsWidgets);
+      await tester.tap(find.text('PLA').last);
+      await _pumpInteraction(tester);
+      expect(find.text('Unlocated'), findsWidgets);
+      expect(find.text('No assignment'), findsWidgets);
+      expect(find.text('#22AA88'), findsOneWidget);
+      expect(find.text('750 g'), findsWidgets);
+      expect(find.text('Registered'), findsOneWidget);
+    },
+  );
+
+  testWidgets(
+    'invalid and cancelled registration leave no filament spool or history',
+    (tester) async {
+      await _launchApp(
+        tester,
+        inventoryStoreFactory,
+        nfcService,
+        incomingLinkService,
+      );
+      await tester.tap(find.text('Spools'));
+      await _pumpInteraction(tester);
+      await tester.tap(find.text('Add filament spool'));
+      await _pumpInteraction(tester);
+
+      await tester.enterText(find.bySemanticsLabel('Material type'), 'PLA');
+      await tester.enterText(
+        find.bySemanticsLabel('Filament color (#RRGGBB)'),
+        'clear',
+      );
+      await tester.enterText(
+        find.bySemanticsLabel('Remaining quantity (g)'),
+        '0',
+      );
+      await tester.tap(find.text('Review filament spool'));
+      await _pumpInteraction(tester);
+      expect(
+        find.text('Enter a positive whole-gram remaining quantity.'),
+        findsOneWidget,
+      );
+      final semantics = tester.ensureSemantics();
+      expect(
+        tester
+            .getSemantics(
+              find.text('Enter a positive whole-gram remaining quantity.'),
+            )
+            .flagsCollection
+            .isLiveRegion,
+        isTrue,
+      );
+      semantics.dispose();
+      expect(find.text('Register filament spool'), findsNothing);
+
+      await tester.enterText(
+        find.bySemanticsLabel('Remaining quantity (g)'),
+        '900',
+      );
+      await tester.tap(find.text('Review filament spool'));
+      await _pumpInteraction(tester);
+      expect(find.text('Choose a color in #RRGGBB format.'), findsOneWidget);
+      await tester.enterText(
+        find.bySemanticsLabel('Filament color (#RRGGBB)'),
+        '#AABBCC',
+      );
+      await tester.tap(find.text('Review filament spool'));
+      await _pumpInteraction(tester);
+      expect(find.text('Register this filament spool?'), findsOneWidget);
+      await tester.tap(find.text('Cancel'));
+      await _pumpInteraction(tester);
+      expect(find.text('No active filament spools yet'), findsOneWidget);
+      expect(find.text('No inventory changes were made.'), findsOneWidget);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await _pumpInteraction(tester);
+      await _launchApp(
+        tester,
+        inventoryStoreFactory,
+        nfcService,
+        incomingLinkService,
+      );
+      await tester.tap(find.text('Spools'));
+      await _pumpInteraction(tester);
+      expect(find.text('No active filament spools yet'), findsOneWidget);
+      expect(find.text('Registered'), findsNothing);
+    },
+  );
+
+  testWidgets('searches active filament spools by their descriptive details', (
+    tester,
+  ) async {
+    await _launchApp(
+      tester,
+      inventoryStoreFactory,
+      nfcService,
+      incomingLinkService,
+    );
+    await tester.tap(find.text('Spools'));
+    await _pumpInteraction(tester);
+    await tester.tap(find.text('Add filament spool'));
+    await _pumpInteraction(tester);
+    await tester.tap(find.text('PLA'));
+    await tester.enterText(
+      find.bySemanticsLabel('Filament color (#RRGGBB)'),
+      '#CC3333',
+    );
+    await tester.enterText(
+      find.bySemanticsLabel('Remaining quantity (g)'),
+      '500',
+    );
+    await tester.enterText(find.bySemanticsLabel('Spool label'), 'Red sample');
+    await tester.tap(find.text('Review filament spool'));
+    await _pumpInteraction(tester);
+    await _confirmSpoolRegistration(tester);
+    expect(find.text('Filament spool registered'), findsOneWidget);
+    await tester.tap(find.text('Back to spools'));
+    await _pumpInteraction(tester);
+
+    await tester.tap(find.text('Add filament spool'));
+    await _pumpInteraction(tester);
+    await tester.enterText(find.bySemanticsLabel('Material type'), 'PCTG');
+    await tester.enterText(
+      find.bySemanticsLabel('Filament color (#RRGGBB)'),
+      '#44AA77',
+    );
+    await tester.enterText(
+      find.bySemanticsLabel('Remaining quantity (g)'),
+      '850',
+    );
+    await tester.enterText(
+      find.bySemanticsLabel('Spool label'),
+      'Green sample',
+    );
+    await tester.tap(find.text('Review filament spool'));
+    await _pumpInteraction(tester);
+    await _confirmSpoolRegistration(tester);
+    await tester.tap(find.text('Back to spools'));
+    await _pumpInteraction(tester);
+
+    expect(find.text('Red sample'), findsOneWidget);
+    expect(find.text('Green sample'), findsOneWidget);
+    await tester.enterText(
+      find.bySemanticsLabel('Search filament spools'),
+      'green',
+    );
+    await _pumpInteraction(tester);
+    expect(find.text('Green sample'), findsOneWidget);
+    expect(find.text('Red sample'), findsNothing);
+    await tester.enterText(
+      find.bySemanticsLabel('Search filament spools'),
+      'pctg',
+    );
+    await _pumpInteraction(tester);
+    expect(find.text('Green sample'), findsOneWidget);
+    await tester.enterText(
+      find.bySemanticsLabel('Search filament spools'),
+      'missing',
+    );
+    await _pumpInteraction(tester);
+    expect(find.text('No matching filament spools'), findsOneWidget);
+  });
+
+  testWidgets('edits descriptive details without adding operational history', (
+    tester,
+  ) async {
+    await _launchApp(
+      tester,
+      inventoryStoreFactory,
+      nfcService,
+      incomingLinkService,
+    );
+    await tester.tap(find.text('Spools'));
+    await _pumpInteraction(tester);
+    await tester.tap(find.text('Add filament spool'));
+    await _pumpInteraction(tester);
+    await tester.tap(find.text('PLA'));
+    await tester.enterText(
+      find.bySemanticsLabel('Filament color (#RRGGBB)'),
+      '#123456',
+    );
+    await tester.enterText(
+      find.bySemanticsLabel('Remaining quantity (g)'),
+      '500',
+    );
+    await tester.enterText(find.bySemanticsLabel('Spool label'), 'First roll');
+    await tester.tap(find.text('Review filament spool'));
+    await _pumpInteraction(tester);
+    await _confirmSpoolRegistration(tester);
+
+    await tester.tap(find.text('Edit details'));
+    await _pumpInteraction(tester);
+    await tester.enterText(find.bySemanticsLabel('Material type'), 'PETG');
+    await tester.enterText(
+      find.bySemanticsLabel('Filament color (#RRGGBB)'),
+      '#abcdef',
+    );
+    await tester.enterText(
+      find.bySemanticsLabel('Spool label'),
+      'Corrected roll',
+    );
+    await tester.enterText(find.bySemanticsLabel('Manufacturer'), 'Acme');
+    await tester.enterText(find.bySemanticsLabel('Product name'), 'Silk');
+    await tester.enterText(
+      find.bySemanticsLabel('Original nominal quantity (g)'),
+      '1000',
+    );
+    await tester.enterText(
+      find.bySemanticsLabel('Notes'),
+      'Transparent in person',
+    );
+    await tester.tap(find.text('Review changes'));
+    await _pumpInteraction(tester);
+    expect(
+      find.text('No change to quantity, state, assignment, or history.'),
+      findsOneWidget,
+    );
+    await tester.tap(find.text('Save details'));
+    for (var attempt = 0; attempt < 20; attempt++) {
+      await tester.pump(const Duration(milliseconds: 100));
+      if (find.text('Filament spool details saved').evaluate().isNotEmpty) {
+        break;
+      }
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 20)),
+      );
+    }
+    expect(find.text('Corrected roll'), findsOneWidget);
+    expect(find.text('#ABCDEF'), findsOneWidget);
+    expect(find.text('500 g'), findsWidgets);
+    expect(find.text('Acme'), findsOneWidget);
+    expect(find.text('Silk'), findsOneWidget);
+    expect(find.text('Original: 1000 g'), findsOneWidget);
+    expect(find.text('Transparent in person'), findsOneWidget);
+    expect(find.text('Registered'), findsOneWidget);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await _pumpInteraction(tester);
+    await _launchApp(
+      tester,
+      inventoryStoreFactory,
+      nfcService,
+      incomingLinkService,
+    );
+    await tester.tap(find.text('Spools'));
+    await _pumpInteraction(tester);
+    await tester.enterText(
+      find.bySemanticsLabel('Search filament spools'),
+      'Corrected roll',
+    );
+    await _pumpInteraction(tester);
+    await tester.tap(find.widgetWithText(ListTile, 'Corrected roll'));
+    await _pumpInteraction(tester);
+    expect(find.text('PETG'), findsOneWidget);
+    expect(find.text('Registered'), findsOneWidget);
+    expect(find.text('500 g'), findsWidgets);
+  });
+
+  testWidgets('chooses one representative color for a multicolored spool', (
+    tester,
+  ) async {
+    await _launchApp(
+      tester,
+      inventoryStoreFactory,
+      nfcService,
+      incomingLinkService,
+    );
+    await tester.tap(find.text('Spools'));
+    await _pumpInteraction(tester);
+    await tester.tap(find.text('Add filament spool'));
+    await _pumpInteraction(tester);
+    await tester.enterText(
+      find.bySemanticsLabel('Material type'),
+      'Rainbow PLA',
+    );
+    await tester.tap(find.text('Pick filament color'));
+    await _pumpInteraction(tester);
+    expect(find.text('Choose one representative color'), findsOneWidget);
+    await tester.ensureVisible(find.text('Blue'));
+    await _pumpInteraction(tester);
+    await tester.tap(find.text('Blue'));
+    await _pumpInteraction(tester);
+    await tester.enterText(
+      find.bySemanticsLabel('Remaining quantity (g)'),
+      '300',
+    );
+    await tester.tap(find.text('Review filament spool'));
+    await _pumpInteraction(tester);
+    expect(find.text('Filament color: #3468C0'), findsOneWidget);
+    await _confirmSpoolRegistration(tester);
+    expect(find.text('#3468C0'), findsOneWidget);
+    expect(find.text('Unlocated'), findsOneWidget);
+  });
+
   testWidgets('keeps every destination reachable at compact width', (
     tester,
   ) async {
@@ -524,6 +870,23 @@ Future<void> _createStorageSlotThroughUi(
   await tester.runAsync(() => saved);
   await tester.pumpAndSettle();
   await _pumpInteraction(tester);
+}
+
+Future<void> _confirmSpoolRegistration(WidgetTester tester) async {
+  await tester.tap(find.text('Register filament spool'));
+  for (var attempt = 0; attempt < 20; attempt++) {
+    await tester.pump(const Duration(milliseconds: 100));
+    if (find.text('Back to spools').evaluate().isNotEmpty ||
+        find
+            .text('Could not register filament spool. Try again.')
+            .evaluate()
+            .isNotEmpty) {
+      return;
+    }
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 20)),
+    );
+  }
 }
 
 Future<void> _launchApp(
