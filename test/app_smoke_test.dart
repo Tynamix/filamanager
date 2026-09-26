@@ -4,5 +4,5 @@ import 'support/app_smoke_suite.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
-  appSmokeSuite(useProductionStore: true);
+  appSmokeSuite();
 }

@@ -1,5 +1,7 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
+import 'dart:ui' show Tristate;
 
 import 'package:filamanager/app/app.dart';
 import 'package:filamanager/app/app_dependencies.dart';
@@ -15,7 +17,7 @@ const _storageSlotId = 'AbCdEfGhIjKlMnOpQrStUv';
 const _storageSlotUri =
     'https://filamanager.vibesolutions.de/s#v1.$_storageSlotId';
 
-void appSmokeSuite({bool useProductionStore = false}) {
+void appSmokeSuite() {
   late Directory temporaryDirectory;
   late InventoryStore Function() inventoryStoreFactory;
   late _SaveSignal saveSignal;
@@ -29,16 +31,10 @@ void appSmokeSuite({bool useProductionStore = false}) {
     nfcService = FakeNfcService();
     incomingLinkService = FakeIncomingLinkService();
     saveSignal = _SaveSignal();
-    if (useProductionStore) {
-      inventoryStoreFactory = () => _SignalingInventoryStore(
-        JsonInventoryStore(File('${temporaryDirectory.path}/inventory.json')),
-        saveSignal,
-      );
-    } else {
-      final inventoryStore = FakeInventoryStore();
-      inventoryStoreFactory = () =>
-          _SignalingInventoryStore(inventoryStore, saveSignal);
-    }
+    inventoryStoreFactory = () => _SignalingInventoryStore(
+      JsonInventoryStore(File('${temporaryDirectory.path}/inventory.json')),
+      saveSignal,
+    );
   });
 
   tearDown(() async {
@@ -147,6 +143,91 @@ void appSmokeSuite({bool useProductionStore = false}) {
     );
 
     expect(find.text('Scan a storage-slot tag'), findsOneWidget);
+  });
+
+  testWidgets('refuses a schema-2 store missing its filament spools', (
+    tester,
+  ) async {
+    final file = File('${temporaryDirectory.path}/inventory.json');
+    const unreadable = '{"schemaVersion":2,"storageSlots":[]}';
+    await tester.runAsync(() => file.writeAsString(unreadable));
+
+    final startupFailure = await tester.runAsync<Object?>(() async {
+      try {
+        await AppDependencies.initialize(
+          inventoryStore: inventoryStoreFactory(),
+          nfcService: nfcService,
+          incomingLinkService: incomingLinkService,
+        );
+        return null;
+      } catch (error) {
+        return error;
+      }
+    });
+    expect(startupFailure, isA<FormatException>());
+    expect(await tester.runAsync(file.readAsString), unreadable);
+  });
+
+  testWidgets('refuses persisted Unlocated spools with broken invariants', (
+    tester,
+  ) async {
+    final file = File('${temporaryDirectory.path}/inventory.json');
+    for (final (remaining, assignment, invalidHistory)
+        in <(int, String?, bool)>[
+          (0, null, false),
+          (500, 'unverified-place', false),
+          (500, null, true),
+        ]) {
+      final unreadable = jsonEncode({
+        'schemaVersion': 2,
+        'storageSlots': <Object>[],
+        'filamentSpools': [
+          {
+            'id': _storageSlotId,
+            'description': {'materialType': 'PLA', 'filamentColor': '#123456'},
+            'remainingGrams': remaining,
+            'state': 'unlocated',
+            'assignmentId': assignment,
+            'history': [
+              {
+                'occurredAt': '2026-09-26T12:00:00Z',
+                'action': 'Registered',
+                'affectedSpoolIds': [_storageSlotId],
+                'beforeState': null,
+                'afterState': 'unlocated',
+                'beforeRemainingGrams': null,
+                'afterRemainingGrams': remaining,
+              },
+              if (invalidHistory)
+                {
+                  'occurredAt': '2026-09-26T13:00:00Z',
+                  'action': 'Quantity corrected',
+                  'affectedSpoolIds': <String>[],
+                  'beforeState': 'unlocated',
+                  'afterState': 'unlocated',
+                  'beforeRemainingGrams': remaining,
+                  'afterRemainingGrams': remaining,
+                },
+            ],
+          },
+        ],
+      });
+      await tester.runAsync(() => file.writeAsString(unreadable));
+      final startupFailure = await tester.runAsync<Object?>(() async {
+        try {
+          await AppDependencies.initialize(
+            inventoryStore: inventoryStoreFactory(),
+            nfcService: nfcService,
+            incomingLinkService: incomingLinkService,
+          );
+          return null;
+        } catch (error) {
+          return error;
+        }
+      });
+      expect(startupFailure, isA<FormatException>());
+      expect(await tester.runAsync(file.readAsString), unreadable);
+    }
   });
 
   testWidgets('creates and reopens a persisted storage slot manually', (
@@ -502,12 +583,17 @@ void appSmokeSuite({bool useProductionStore = false}) {
       expect(find.text('Filament spool registered'), findsOneWidget);
       expect(find.text('750 g'), findsWidgets);
       expect(find.text('Registered'), findsOneWidget);
-      expect(find.text('Affected: this filament spool'), findsOneWidget);
-      expect(find.text('Before: not registered'), findsOneWidget);
-      expect(
-        find.text('After: Unlocated · 750 g · no assignment'),
-        findsOneWidget,
-      );
+      expect(find.text('STATE'), findsOneWidget);
+      expect(find.text('ASSIGNMENT'), findsOneWidget);
+      expect(find.text('REMAINING QUANTITY'), findsOneWidget);
+      expect(find.text('FILAMENT COLOR'), findsOneWidget);
+      expect(find.bySemanticsLabel('State: Unlocated'), findsOneWidget);
+      expect(find.text('AFFECTED'), findsOneWidget);
+      expect(find.text('this filament spool'), findsOneWidget);
+      expect(find.text('BEFORE'), findsOneWidget);
+      expect(find.text('not registered'), findsOneWidget);
+      expect(find.text('AFTER'), findsOneWidget);
+      expect(find.text('Unlocated · 750 g · no assignment'), findsOneWidget);
 
       await tester.tap(find.text('Home'));
       await _pumpInteraction(tester);
@@ -754,7 +840,7 @@ void appSmokeSuite({bool useProductionStore = false}) {
     expect(find.text('500 g'), findsWidgets);
     expect(find.text('Acme'), findsOneWidget);
     expect(find.text('Silk'), findsOneWidget);
-    expect(find.text('Original: 1000 g'), findsOneWidget);
+    expect(find.text('1000 g'), findsOneWidget);
     expect(find.text('Transparent in person'), findsOneWidget);
     expect(find.text('Registered'), findsOneWidget);
 
@@ -810,10 +896,63 @@ void appSmokeSuite({bool useProductionStore = false}) {
     );
     await tester.tap(find.text('Review filament spool'));
     await _pumpInteraction(tester);
-    expect(find.text('Filament color: #3468C0'), findsOneWidget);
+    expect(find.text('FILAMENT COLOR'), findsOneWidget);
+    expect(find.text('#3468C0'), findsOneWidget);
     await _confirmSpoolRegistration(tester);
     expect(find.text('#3468C0'), findsOneWidget);
     expect(find.text('Unlocated'), findsOneWidget);
+  });
+
+  testWidgets('moves assistive focus through registration and back to Spools', (
+    tester,
+  ) async {
+    await _launchApp(
+      tester,
+      inventoryStoreFactory,
+      nfcService,
+      incomingLinkService,
+    );
+    final semantics = tester.ensureSemantics();
+    await tester.tap(find.text('Spools'));
+    await _pumpInteraction(tester);
+    await tester.tap(find.text('Add filament spool'));
+    await _pumpInteraction(tester);
+    expect(
+      tester
+          .getSemantics(find.bySemanticsLabel('Material type'))
+          .flagsCollection
+          .isFocused,
+      Tristate.isTrue,
+    );
+
+    await tester.tap(find.text('PLA'));
+    await tester.enterText(
+      find.bySemanticsLabel('Filament color (#RRGGBB)'),
+      '#224466',
+    );
+    await tester.enterText(
+      find.bySemanticsLabel('Remaining quantity (g)'),
+      '650',
+    );
+    await tester.tap(find.text('Review filament spool'));
+    await _pumpInteraction(tester);
+    expect(
+      tester
+          .getSemantics(find.text('Register this filament spool?'))
+          .flagsCollection
+          .isFocused,
+      Tristate.isTrue,
+    );
+    await tester.tap(find.text('Cancel'));
+    await _pumpInteraction(tester);
+    expect(
+      tester
+          .getSemantics(find.text('Add filament spool'))
+          .flagsCollection
+          .isFocused,
+      Tristate.isTrue,
+    );
+    semantics.dispose();
   });
 
   testWidgets('keeps every destination reachable at compact width', (

@@ -1,3 +1,4 @@
+import 'package:filamanager/app/fila_components.dart';
 import 'package:filamanager/app/fila_theme.dart';
 import 'package:filamanager/inventory/filament_spool.dart';
 import 'package:flutter/material.dart';
@@ -7,12 +8,14 @@ final class SpoolsView extends StatefulWidget {
     required this.spools,
     required this.onAddSpool,
     required this.onOpenSpool,
+    required this.addButtonFocusNode,
     super.key,
   });
 
   final List<FilamentSpool> spools;
   final VoidCallback onAddSpool;
   final ValueChanged<FilamentSpool> onOpenSpool;
+  final FocusNode addButtonFocusNode;
 
   @override
   State<SpoolsView> createState() => _SpoolsViewState();
@@ -50,7 +53,7 @@ final class _SpoolsViewState extends State<SpoolsView> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const SpoolEyebrow('Local inventory'),
+              const FilaEyebrow('Local inventory'),
               const SizedBox(height: 4),
               Row(
                 children: [
@@ -61,6 +64,7 @@ final class _SpoolsViewState extends State<SpoolsView> {
                     ),
                   ),
                   FilledButton.icon(
+                    focusNode: widget.addButtonFocusNode,
                     onPressed: widget.onAddSpool,
                     icon: const Icon(Icons.add),
                     label: const Text('Add filament spool'),
@@ -78,30 +82,14 @@ final class _SpoolsViewState extends State<SpoolsView> {
               ),
               const SizedBox(height: 16),
               if (widget.spools.isEmpty)
-                const SpoolCard(child: Text('No active filament spools yet'))
+                const FilaCard(child: Text('No active filament spools yet'))
               else if (matchingSpools.isEmpty)
-                const SpoolCard(child: Text('No matching filament spools'))
+                const FilaCard(child: Text('No matching filament spools'))
               else
                 for (final spool in matchingSpools) ...[
-                  SpoolCard(
-                    child: Material(
-                      color: Colors.transparent,
-                      child: ListTile(
-                        contentPadding: EdgeInsets.zero,
-                        leading: SpoolSwatch(
-                          color: spool.description.filamentColor,
-                        ),
-                        title: Text(
-                          spool.description.spoolLabel ??
-                              spool.description.materialType,
-                        ),
-                        subtitle: Text(
-                          '${spool.description.materialType} · Unlocated · ${spool.remainingGrams} g',
-                        ),
-                        trailing: const Icon(Icons.chevron_right),
-                        onTap: () => widget.onOpenSpool(spool),
-                      ),
-                    ),
+                  FilamentSpoolTile(
+                    spool: spool,
+                    onTap: () => widget.onOpenSpool(spool),
                   ),
                   const SizedBox(height: 12),
                 ],
@@ -113,17 +101,51 @@ final class _SpoolsViewState extends State<SpoolsView> {
   }
 }
 
+final class FilamentSpoolTile extends StatelessWidget {
+  const FilamentSpoolTile({
+    required this.spool,
+    required this.onTap,
+    super.key,
+  });
+
+  final FilamentSpool spool;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) => FilaCard(
+    child: Material(
+      color: Colors.transparent,
+      child: ListTile(
+        contentPadding: EdgeInsets.zero,
+        leading: SpoolSwatch(color: spool.description.filamentColor),
+        title: Text(
+          spool.description.spoolLabel ?? spool.description.materialType,
+        ),
+        subtitle: Text(
+          '${spool.description.materialType} · Unlocated · ${spool.remainingGrams} g',
+        ),
+        trailing: const Icon(Icons.chevron_right),
+        onTap: onTap,
+      ),
+    ),
+  );
+}
+
 final class SpoolDetailsView extends StatelessWidget {
   const SpoolDetailsView({
     required this.spool,
     required this.onBack,
     required this.onEdit,
+    required this.headingFocusNode,
+    required this.editButtonFocusNode,
     super.key,
   });
 
   final FilamentSpool spool;
   final VoidCallback onBack;
   final VoidCallback onEdit;
+  final FocusNode headingFocusNode;
+  final FocusNode editButtonFocusNode;
 
   @override
   Widget build(BuildContext context) {
@@ -142,46 +164,78 @@ final class SpoolDetailsView extends StatelessWidget {
                 icon: const Icon(Icons.arrow_back),
                 label: const Text('Back to spools'),
               ),
-              const SpoolEyebrow('Filament spool'),
+              const FilaEyebrow('Filament spool'),
               const SizedBox(height: 4),
-              Text(
-                description.spoolLabel ?? description.materialType,
-                style: Theme.of(context).textTheme.displayMedium,
+              Focus(
+                focusNode: headingFocusNode,
+                child: Semantics(
+                  header: true,
+                  child: Text(
+                    description.spoolLabel ?? description.materialType,
+                    style: Theme.of(context).textTheme.displayMedium,
+                  ),
+                ),
               ),
               TextButton.icon(
+                focusNode: editButtonFocusNode,
                 onPressed: onEdit,
                 icon: const Icon(Icons.edit_outlined),
                 label: const Text('Edit details'),
               ),
               const SizedBox(height: 20),
-              SpoolCard(
+              FilaCard(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Row(
-                      children: [
-                        SpoolSwatch(color: description.filamentColor),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Text(
-                            description.materialType,
-                            style: Theme.of(context).textTheme.titleMedium,
-                          ),
-                        ),
-                      ],
+                    const FilaDetailRow(
+                      label: 'State',
+                      child: _SpoolStatusPill(),
                     ),
-                    const SizedBox(height: 16),
-                    const Text('Unlocated'),
-                    const Text('No assignment'),
-                    Text('${spool.remainingGrams} g'),
-                    Text(description.filamentColor),
+                    const FilaDetailRow(
+                      label: 'Assignment',
+                      child: Text('No assignment'),
+                    ),
+                    FilaDetailRow(
+                      label: 'Material type',
+                      child: Text(
+                        description.materialType,
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
+                    ),
+                    FilaDetailRow(
+                      label: 'Filament color',
+                      child: Row(
+                        children: [
+                          SpoolSwatch(color: description.filamentColor),
+                          const SizedBox(width: 12),
+                          Text(description.filamentColor),
+                        ],
+                      ),
+                    ),
+                    FilaDetailRow(
+                      label: 'Remaining quantity',
+                      child: Text('${spool.remainingGrams} g'),
+                    ),
                     if (description.manufacturer != null)
-                      Text(description.manufacturer!),
+                      FilaDetailRow(
+                        label: 'Manufacturer',
+                        child: Text(description.manufacturer!),
+                      ),
                     if (description.productName != null)
-                      Text(description.productName!),
+                      FilaDetailRow(
+                        label: 'Product name',
+                        child: Text(description.productName!),
+                      ),
                     if (description.originalNominalGrams != null)
-                      Text('Original: ${description.originalNominalGrams} g'),
-                    if (description.notes != null) Text(description.notes!),
+                      FilaDetailRow(
+                        label: 'Original nominal quantity',
+                        child: Text('${description.originalNominalGrams} g'),
+                      ),
+                    if (description.notes != null)
+                      FilaDetailRow(
+                        label: 'Notes',
+                        child: Text(description.notes!),
+                      ),
                   ],
                 ),
               ),
@@ -192,22 +246,56 @@ final class SpoolDetailsView extends StatelessWidget {
               ),
               const SizedBox(height: 12),
               for (final entry in spool.history)
-                SpoolCard(
-                  child: Column(
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(entry.action),
-                      Text(entry.occurredAt.toLocal().toString()),
-                      Text(
-                        'Affected: ${entry.affectedSpoolIds.length == 1 && entry.affectedSpoolIds.single == spool.id ? 'this filament spool' : '${entry.affectedSpoolIds.length} filament spools'}',
+                      const Padding(
+                        padding: EdgeInsets.fromLTRB(0, 16, 12, 0),
+                        child: Icon(Icons.history, color: FilaColors.green),
                       ),
-                      Text(
-                        entry.beforeState == null
-                            ? 'Before: not registered'
-                            : 'Before: ${entry.beforeState!.name} · ${entry.beforeRemainingGrams} g',
-                      ),
-                      Text(
-                        'After: Unlocated · ${entry.afterRemainingGrams} g · no assignment',
+                      Expanded(
+                        child: FilaCard(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                entry.action,
+                                style: Theme.of(context).textTheme.titleMedium,
+                              ),
+                              Text(
+                                entry.occurredAt.toLocal().toString(),
+                                style: Theme.of(context).textTheme.bodySmall,
+                              ),
+                              const SizedBox(height: 14),
+                              FilaDetailRow(
+                                label: 'Affected',
+                                child: Text(
+                                  entry.affectedSpoolIds.length == 1 &&
+                                          entry.affectedSpoolIds.single ==
+                                              spool.id
+                                      ? 'this filament spool'
+                                      : '${entry.affectedSpoolIds.length} filament spools',
+                                ),
+                              ),
+                              FilaDetailRow(
+                                label: 'Before',
+                                child: Text(
+                                  entry.beforeState == null
+                                      ? 'not registered'
+                                      : '${entry.beforeState!.name} · ${entry.beforeRemainingGrams} g',
+                                ),
+                              ),
+                              FilaDetailRow(
+                                label: 'After',
+                                child: Text(
+                                  'Unlocated · ${entry.afterRemainingGrams} g · no assignment',
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
                       ),
                     ],
                   ),
@@ -238,6 +326,8 @@ final class _RegisterSpoolSheetState extends State<RegisterSpoolSheet> {
   final _product = TextEditingController();
   final _nominal = TextEditingController();
   final _notes = TextEditingController();
+  final _materialFocus = FocusNode(debugLabel: 'material type');
+  final _reviewFocus = FocusNode(debugLabel: 'spool review');
   SpoolRegistration? _review;
   String? _error;
 
@@ -289,6 +379,9 @@ final class _RegisterSpoolSheetState extends State<RegisterSpoolSheet> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _materialFocus.requestFocus();
+    });
     final spool = widget.editingSpool;
     if (spool != null) {
       final description = spool.description;
@@ -317,6 +410,8 @@ final class _RegisterSpoolSheetState extends State<RegisterSpoolSheet> {
     ]) {
       controller.dispose();
     }
+    _materialFocus.dispose();
+    _reviewFocus.dispose();
     super.dispose();
   }
 
@@ -352,6 +447,9 @@ final class _RegisterSpoolSheetState extends State<RegisterSpoolSheet> {
         );
         _error = null;
       });
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _reviewFocus.requestFocus();
+      });
     } on FormatException catch (error) {
       setState(() => _error = error.message);
     }
@@ -374,7 +472,7 @@ final class _RegisterSpoolSheetState extends State<RegisterSpoolSheet> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              SpoolEyebrow(
+              FilaEyebrow(
                 review == null
                     ? editing
                           ? 'Edit filament spool'
@@ -384,15 +482,21 @@ final class _RegisterSpoolSheetState extends State<RegisterSpoolSheet> {
                     : 'Review filament spool',
               ),
               const SizedBox(height: 6),
-              Text(
-                review == null
-                    ? editing
-                          ? 'Edit descriptive details'
-                          : 'Register as Unlocated'
-                    : editing
-                    ? 'Save these details?'
-                    : 'Register this filament spool?',
-                style: Theme.of(context).textTheme.headlineMedium,
+              Focus(
+                focusNode: _reviewFocus,
+                child: Semantics(
+                  header: true,
+                  child: Text(
+                    review == null
+                        ? editing
+                              ? 'Edit descriptive details'
+                              : 'Register as Unlocated'
+                        : editing
+                        ? 'Save these details?'
+                        : 'Register this filament spool?',
+                    style: Theme.of(context).textTheme.headlineMedium,
+                  ),
+                ),
               ),
               const SizedBox(height: 14),
               Expanded(
@@ -428,7 +532,12 @@ final class _RegisterSpoolSheetState extends State<RegisterSpoolSheet> {
                   ),
                 ),
                 TextButton(
-                  onPressed: () => setState(() => _review = null),
+                  onPressed: () {
+                    setState(() => _review = null);
+                    WidgetsBinding.instance.addPostFrameCallback((_) {
+                      if (mounted) _materialFocus.requestFocus();
+                    });
+                  },
                   child: const Text('Back to edit'),
                 ),
               ],
@@ -460,6 +569,7 @@ final class _RegisterSpoolSheetState extends State<RegisterSpoolSheet> {
       ),
       TextField(
         controller: _material,
+        focusNode: _materialFocus,
         decoration: const InputDecoration(labelText: 'Material type'),
         onChanged: (_) => setState(() {}),
       ),
@@ -486,7 +596,7 @@ final class _RegisterSpoolSheetState extends State<RegisterSpoolSheet> {
           ),
         ),
       const SizedBox(height: 12),
-      const SpoolEyebrow('Optional details'),
+      const FilaEyebrow('Optional details'),
       TextField(
         controller: _label,
         decoration: const InputDecoration(labelText: 'Spool label'),
@@ -515,71 +625,97 @@ final class _RegisterSpoolSheetState extends State<RegisterSpoolSheet> {
 
   Widget _reviewContents(SpoolRegistration registration) {
     final description = registration.description;
-    return SpoolCard(
+    return FilaCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(description.spoolLabel ?? description.materialType),
-          Text('Material type: ${description.materialType}'),
-          Text('Filament color: ${description.filamentColor}'),
-          Text('Remaining quantity: ${registration.remainingGrams} g'),
-          if (widget.editingSpool == null) ...[
-            const Text('Unlocated'),
-            const Text('No assignment'),
-          ] else
-            const Text('No change to quantity, state, assignment, or history.'),
-          if (description.manufacturer != null)
-            Text('Manufacturer: ${description.manufacturer}'),
-          if (description.productName != null)
-            Text('Product name: ${description.productName}'),
-          if (description.originalNominalGrams != null)
-            Text(
-              'Original nominal quantity: ${description.originalNominalGrams} g',
+          Text(
+            description.spoolLabel ?? description.materialType,
+            style: Theme.of(context).textTheme.titleMedium,
+          ),
+          const SizedBox(height: 14),
+          FilaDetailRow(
+            label: 'Material type',
+            child: Text(description.materialType),
+          ),
+          FilaDetailRow(
+            label: 'Filament color',
+            child: Row(
+              children: [
+                SpoolSwatch(color: description.filamentColor),
+                const SizedBox(width: 12),
+                Text(description.filamentColor),
+              ],
             ),
-          if (description.notes != null) Text('Notes: ${description.notes}'),
+          ),
+          FilaDetailRow(
+            label: 'Remaining quantity',
+            child: Text('${registration.remainingGrams} g'),
+          ),
+          if (widget.editingSpool == null) ...[
+            const FilaDetailRow(label: 'State', child: _SpoolStatusPill()),
+            const FilaDetailRow(
+              label: 'Assignment',
+              child: Text('No assignment'),
+            ),
+          ] else
+            const Padding(
+              padding: EdgeInsets.only(bottom: 14),
+              child: Text(
+                'No change to quantity, state, assignment, or history.',
+              ),
+            ),
+          if (description.manufacturer != null)
+            FilaDetailRow(
+              label: 'Manufacturer',
+              child: Text(description.manufacturer!),
+            ),
+          if (description.productName != null)
+            FilaDetailRow(
+              label: 'Product name',
+              child: Text(description.productName!),
+            ),
+          if (description.originalNominalGrams != null)
+            FilaDetailRow(
+              label: 'Original nominal quantity',
+              child: Text('${description.originalNominalGrams} g'),
+            ),
+          if (description.notes != null)
+            FilaDetailRow(label: 'Notes', child: Text(description.notes!)),
         ],
       ),
     );
   }
 }
 
-final class SpoolEyebrow extends StatelessWidget {
-  const SpoolEyebrow(this.text, {super.key});
-  final String text;
+final class _SpoolStatusPill extends StatelessWidget {
+  const _SpoolStatusPill();
 
   @override
-  Widget build(BuildContext context) => Text(
-    text.toUpperCase(),
-    style: const TextStyle(
-      color: FilaColors.muted,
-      fontSize: 11,
-      fontWeight: FontWeight.w800,
-      letterSpacing: 1.1,
-    ),
-  );
-}
-
-final class SpoolCard extends StatelessWidget {
-  const SpoolCard({required this.child, super.key});
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) => Container(
-    width: double.infinity,
-    padding: const EdgeInsets.all(18),
-    decoration: BoxDecoration(
-      color: Colors.white,
-      border: Border.all(color: FilaColors.line),
-      borderRadius: BorderRadius.circular(22),
-      boxShadow: const [
-        BoxShadow(
-          color: Color(0x0D1D3024),
-          blurRadius: 20,
-          offset: Offset(0, 5),
+  Widget build(BuildContext context) => Semantics(
+    label: 'State: Unlocated',
+    child: ExcludeSemantics(
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+        decoration: BoxDecoration(
+          color: const Color(0xFFF1F5DD),
+          border: Border.all(color: FilaColors.line),
+          borderRadius: BorderRadius.circular(999),
         ),
-      ],
+        child: const Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.location_off_outlined,
+              size: 16,
+              color: FilaColors.greenDark,
+            ),
+            SizedBox(width: 6),
+            Text('Unlocated', style: TextStyle(fontWeight: FontWeight.w800)),
+          ],
+        ),
+      ),
     ),
-    child: child,
   );
 }
 

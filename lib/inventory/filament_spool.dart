@@ -212,19 +212,58 @@ final class FilamentSpool {
   };
 
   factory FilamentSpool.fromJson(Map<String, dynamic> json) {
-    final historyJson = json['history'] as List;
+    final id = FilamentSpoolId.parse(json['id'] as String);
+    final remainingGrams = json['remainingGrams'];
+    final assignmentId = json['assignmentId'];
+    if (remainingGrams is! int || remainingGrams <= 0) {
+      throw const FormatException(
+        'Active filament spool must have a positive quantity.',
+      );
+    }
+    if (assignmentId != null) {
+      throw const FormatException(
+        'Unlocated filament spool cannot have an assignment.',
+      );
+    }
+    final historyJson = json['history'];
+    if (historyJson is! List || historyJson.isEmpty) {
+      throw const FormatException(
+        'Filament spool must have registration history.',
+      );
+    }
+    final history = List<SpoolHistoryEntry>.unmodifiable([
+      for (final entry in historyJson)
+        SpoolHistoryEntry.fromJson(entry as Map<String, dynamic>),
+    ]);
+    final registration = history.first;
+    if (registration.action != 'Registered' ||
+        registration.beforeState != null ||
+        registration.beforeRemainingGrams != null ||
+        !registration.affectedSpoolIds.contains(id) ||
+        history.last.afterRemainingGrams != remainingGrams) {
+      throw const FormatException('Invalid filament-spool history.');
+    }
+    for (final entry in history) {
+      if (entry.action.trim().isEmpty ||
+          !entry.affectedSpoolIds.contains(id) ||
+          entry.afterRemainingGrams <= 0) {
+        throw const FormatException('Invalid filament-spool history entry.');
+      }
+    }
+    for (var index = 1; index < history.length; index++) {
+      if (history[index].occurredAt.isBefore(history[index - 1].occurredAt)) {
+        throw const FormatException('Filament-spool history is out of order.');
+      }
+    }
     return FilamentSpool(
-      id: FilamentSpoolId.parse(json['id'] as String),
+      id: id,
       description: SpoolDescription.fromJson(
         json['description'] as Map<String, dynamic>,
       ),
-      remainingGrams: json['remainingGrams'] as int,
+      remainingGrams: remainingGrams,
       state: FilamentSpoolState.values.byName(json['state'] as String),
-      assignmentId: json['assignmentId'] as String?,
-      history: List.unmodifiable([
-        for (final entry in historyJson)
-          SpoolHistoryEntry.fromJson(entry as Map<String, dynamic>),
-      ]),
+      assignmentId: null,
+      history: history,
     );
   }
 }

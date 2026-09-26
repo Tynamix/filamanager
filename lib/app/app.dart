@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:filamanager/app/app_dependencies.dart';
 import 'package:filamanager/app/fila_theme.dart';
+import 'package:filamanager/app/fila_components.dart';
 import 'package:filamanager/inventory/material_unit.dart';
 import 'package:filamanager/inventory/place_name.dart';
 import 'package:filamanager/app/spools_view.dart';
@@ -41,6 +42,9 @@ final class _InventoryShellState extends State<_InventoryShell> {
   StorageSlot? _selectedStorageSlot;
   MaterialUnit? _selectedMaterialUnit;
   FilamentSpool? _selectedFilamentSpool;
+  final _addSpoolFocus = FocusNode(debugLabel: 'add filament spool');
+  final _spoolDetailsFocus = FocusNode(debugLabel: 'filament spool details');
+  final _editSpoolFocus = FocusNode(debugLabel: 'edit spool details');
   String? _referenceError;
   late final StreamSubscription<NfcEvent> _nfcEvents;
   late final StreamSubscription<Uri> _incomingLinks;
@@ -105,6 +109,9 @@ final class _InventoryShellState extends State<_InventoryShell> {
   void dispose() {
     unawaited(_nfcEvents.cancel());
     unawaited(_incomingLinks.cancel());
+    _addSpoolFocus.dispose();
+    _spoolDetailsFocus.dispose();
+    _editSpoolFocus.dispose();
     super.dispose();
   }
 
@@ -132,12 +139,15 @@ final class _InventoryShellState extends State<_InventoryShell> {
                 spool: _selectedFilamentSpool!,
                 onBack: () => setState(() => _selectedFilamentSpool = null),
                 onEdit: _editSpoolDetails,
+                headingFocusNode: _spoolDetailsFocus,
+                editButtonFocusNode: _editSpoolFocus,
               )
             : SpoolsView(
                 spools: widget.dependencies.inventory.filamentSpools,
                 onAddSpool: _registerFilamentSpool,
                 onOpenSpool: (spool) =>
                     setState(() => _selectedFilamentSpool = spool),
+                addButtonFocusNode: _addSpoolFocus,
               ),
       ),
       _InventoryDestination(
@@ -283,6 +293,7 @@ final class _InventoryShellState extends State<_InventoryShell> {
       return;
     }
     if (registration == null) {
+      _addSpoolFocus.requestFocus();
       _showInventoryUnchangedResult('Registration cancelled');
       return;
     }
@@ -292,6 +303,9 @@ final class _InventoryShellState extends State<_InventoryShell> {
       );
       if (!mounted) return;
       setState(() => _selectedFilamentSpool = spool);
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _spoolDetailsFocus.requestFocus();
+      });
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Semantics(
@@ -318,7 +332,11 @@ final class _InventoryShellState extends State<_InventoryShell> {
       isScrollControlled: true,
       builder: (context) => RegisterSpoolSheet(editingSpool: spool),
     );
-    if (updated == null || !mounted) return;
+    if (!mounted) return;
+    if (updated == null) {
+      _editSpoolFocus.requestFocus();
+      return;
+    }
     try {
       final saved = await widget.dependencies.editSpoolDetails(
         spool.id,
@@ -326,6 +344,9 @@ final class _InventoryShellState extends State<_InventoryShell> {
       );
       if (!mounted) return;
       setState(() => _selectedFilamentSpool = saved);
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _spoolDetailsFocus.requestFocus();
+      });
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Filament spool details saved')),
       );
@@ -602,11 +623,11 @@ final class _ReferenceErrorView extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const _Eyebrow('Nothing changed'),
+              const FilaEyebrow('Nothing changed'),
               const SizedBox(height: 4),
               Text(title, style: Theme.of(context).textTheme.displayMedium),
               const SizedBox(height: 20),
-              const _PrototypeCard(
+              const FilaCard(
                 child: _EmptyCardContent(
                   icon: Icons.nfc_outlined,
                   title: 'No inventory changes were made.',
@@ -635,7 +656,7 @@ final class _ChoosePlaceTypeSheet extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            const _Eyebrow('New place'),
+            const FilaEyebrow('New place'),
             const SizedBox(height: 6),
             Text(
               'Choose place type',
@@ -682,7 +703,7 @@ final class _PlaceTypeTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return _PrototypeCard(
+    return FilaCard(
       child: Material(
         color: Colors.transparent,
         child: ListTile(
@@ -728,7 +749,7 @@ final class _PlacesView extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const _Eyebrow('Local inventory'),
+              const FilaEyebrow('Local inventory'),
               const SizedBox(height: 4),
               Text('Places', style: Theme.of(context).textTheme.displayMedium),
               const SizedBox(height: 16),
@@ -742,7 +763,7 @@ final class _PlacesView extends StatelessWidget {
               ),
               const SizedBox(height: 20),
               if (storageSlots.isEmpty && materialUnits.isEmpty)
-                const _PrototypeCard(
+                const FilaCard(
                   child: _EmptyCardContent(
                     icon: Icons.shelves,
                     title: 'No storage slots or material units yet',
@@ -750,7 +771,7 @@ final class _PlacesView extends StatelessWidget {
                   ),
                 )
               else ...[
-                if (storageSlots.isNotEmpty) const _Eyebrow('Storage slots'),
+                if (storageSlots.isNotEmpty) const FilaEyebrow('Storage slots'),
                 for (final area in areas.entries) ...[
                   const SizedBox(height: 12),
                   Text(
@@ -761,7 +782,7 @@ final class _PlacesView extends StatelessWidget {
                   for (final storageSlot in storageSlots.where(
                     (slot) => placeNameKey(slot.area ?? '') == area.key,
                   )) ...[
-                    _PrototypeCard(
+                    FilaCard(
                       child: Material(
                         color: Colors.transparent,
                         child: ListTile(
@@ -785,10 +806,10 @@ final class _PlacesView extends StatelessWidget {
                 ],
                 if (materialUnits.isNotEmpty) ...[
                   const SizedBox(height: 16),
-                  const _Eyebrow('Material units'),
+                  const FilaEyebrow('Material units'),
                   const SizedBox(height: 12),
                   for (final unit in materialUnits) ...[
-                    _PrototypeCard(
+                    FilaCard(
                       child: Material(
                         color: Colors.transparent,
                         child: ListTile(
@@ -837,7 +858,7 @@ final class _StorageSlotContextView extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const _Eyebrow('Storage slot'),
+              const FilaEyebrow('Storage slot'),
               const SizedBox(height: 4),
               Text(
                 storageSlot.name,
@@ -847,7 +868,7 @@ final class _StorageSlotContextView extends StatelessWidget {
               _PlaceStatusPill(archived: storageSlot.archived),
               if (storageSlot.area != null) Text(storageSlot.area!),
               const SizedBox(height: 20),
-              _PrototypeCard(
+              FilaCard(
                 child: _EmptyCardContent(
                   icon: Icons.inventory_2_outlined,
                   title: storageSlot.occupantId == null ? 'Empty' : 'Occupied',
@@ -902,7 +923,7 @@ final class _MaterialUnitContextView extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const _Eyebrow('Material unit'),
+              const FilaEyebrow('Material unit'),
               const SizedBox(height: 4),
               Text(
                 materialUnit.name,
@@ -912,7 +933,7 @@ final class _MaterialUnitContextView extends StatelessWidget {
               _PlaceStatusPill(archived: materialUnit.archived),
               const SizedBox(height: 20),
               for (final slot in materialUnit.activeSlots) ...[
-                _PrototypeCard(
+                FilaCard(
                   child: ListTile(
                     contentPadding: EdgeInsets.zero,
                     leading: const Icon(Icons.view_module_outlined),
@@ -954,7 +975,7 @@ final class _RegisterTagSheet extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            const _Eyebrow('Confirm tag write'),
+            const FilaEyebrow('Confirm tag write'),
             const SizedBox(height: 6),
             Text(
               'Replace tag contents?',
@@ -1017,7 +1038,7 @@ final class _WriteTagProgressSheetState extends State<_WriteTagProgressSheet> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            const _Eyebrow('NFC tag registration'),
+            const FilaEyebrow('NFC tag registration'),
             const SizedBox(height: 6),
             Text(
               _cancelling ? 'Cancelling…' : 'Ready to write',
@@ -1072,18 +1093,18 @@ final class _PlaceReview extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        _Eyebrow('Review $kind'),
+        FilaEyebrow('Review $kind'),
         const SizedBox(height: 6),
         Text(
           '$action this $kind?',
           style: Theme.of(context).textTheme.headlineMedium,
         ),
         const SizedBox(height: 18),
-        _PrototypeCard(
+        FilaCard(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _Eyebrow(nameLabel),
+              FilaEyebrow(nameLabel),
               const SizedBox(height: 4),
               Text(name, style: Theme.of(context).textTheme.titleMedium),
               ...details,
@@ -1201,7 +1222,7 @@ final class _StorageSlotSheetState extends State<_StorageSlotSheet> {
                       details: [
                         if (_areaController.text.trim().isNotEmpty) ...[
                           const SizedBox(height: 12),
-                          const _Eyebrow('Storage area'),
+                          const FilaEyebrow('Storage area'),
                           const SizedBox(height: 4),
                           Text(_areaController.text.trim()),
                         ],
@@ -1209,7 +1230,7 @@ final class _StorageSlotSheetState extends State<_StorageSlotSheet> {
                     ),
                   ]
                 : [
-                    const _Eyebrow('New place'),
+                    const FilaEyebrow('New place'),
                     const SizedBox(height: 6),
                     Text(
                       widget.initial == null
@@ -1335,7 +1356,7 @@ final class _MaterialUnitSheetState extends State<_MaterialUnitSheet> {
                     onBack: () => setState(() => _reviewing = false),
                     details: [
                       const SizedBox(height: 12),
-                      const _Eyebrow('Material slots'),
+                      const FilaEyebrow('Material slots'),
                       for (final controller in _slotControllers) ...[
                         const SizedBox(height: 4),
                         Text(controller.text.trim()),
@@ -1344,7 +1365,7 @@ final class _MaterialUnitSheetState extends State<_MaterialUnitSheet> {
                   ),
                 ]
               : [
-                  const _Eyebrow('Places'),
+                  const FilaEyebrow('Places'),
                   const SizedBox(height: 6),
                   Text(
                     widget.initial == null
@@ -1361,7 +1382,7 @@ final class _MaterialUnitSheetState extends State<_MaterialUnitSheet> {
                     onChanged: (_) => setState(() => _error = null),
                   ),
                   const SizedBox(height: 16),
-                  const _Eyebrow('Material slots'),
+                  const FilaEyebrow('Material slots'),
                   const SizedBox(height: 8),
                   for (
                     var index = 0;
@@ -1646,7 +1667,7 @@ final class _HomeView extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const _Eyebrow('Ready when you are'),
+              const FilaEyebrow('Ready when you are'),
               const SizedBox(height: 8),
               Text(
                 'Find the slot.\nMove the spool.',
@@ -1667,7 +1688,7 @@ final class _HomeView extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const _Eyebrow('Manual lookup'),
+                        const FilaEyebrow('Manual lookup'),
                         const SizedBox(height: 3),
                         Text(
                           'Find a spool',
@@ -1684,7 +1705,7 @@ final class _HomeView extends StatelessWidget {
               ),
               const SizedBox(height: 10),
               if (spools.isEmpty)
-                const _PrototypeCard(
+                const FilaCard(
                   child: _EmptyCardContent(
                     icon: Icons.album_outlined,
                     title: 'No active filament spools yet',
@@ -1693,25 +1714,9 @@ final class _HomeView extends StatelessWidget {
                 )
               else
                 for (final spool in spools.take(3)) ...[
-                  SpoolCard(
-                    child: Material(
-                      color: Colors.transparent,
-                      child: ListTile(
-                        contentPadding: EdgeInsets.zero,
-                        leading: SpoolSwatch(
-                          color: spool.description.filamentColor,
-                        ),
-                        title: Text(
-                          spool.description.spoolLabel ??
-                              spool.description.materialType,
-                        ),
-                        subtitle: Text(
-                          '${spool.description.materialType} · Unlocated · ${spool.remainingGrams} g',
-                        ),
-                        trailing: const Icon(Icons.chevron_right),
-                        onTap: () => onOpenSpool(spool),
-                      ),
-                    ),
+                  FilamentSpoolTile(
+                    spool: spool,
+                    onTap: () => onOpenSpool(spool),
                   ),
                   const SizedBox(height: 12),
                 ],
@@ -1836,11 +1841,11 @@ final class _EmptyArea extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const _Eyebrow('Local inventory'),
+              const FilaEyebrow('Local inventory'),
               const SizedBox(height: 4),
               Text(title, style: Theme.of(context).textTheme.displayMedium),
               const SizedBox(height: 20),
-              _PrototypeCard(
+              FilaCard(
                 child: _EmptyCardContent(
                   icon: icon,
                   title: message,
@@ -1850,25 +1855,6 @@ final class _EmptyArea extends StatelessWidget {
             ],
           ),
         ),
-      ),
-    );
-  }
-}
-
-final class _Eyebrow extends StatelessWidget {
-  const _Eyebrow(this.text);
-
-  final String text;
-
-  @override
-  Widget build(BuildContext context) {
-    return Text(
-      text.toUpperCase(),
-      style: const TextStyle(
-        color: FilaColors.muted,
-        fontSize: 11,
-        fontWeight: FontWeight.w800,
-        letterSpacing: 1.1,
       ),
     );
   }
@@ -1902,33 +1888,6 @@ final class _PlaceStatusPill extends StatelessWidget {
           ),
         ),
       ),
-    );
-  }
-}
-
-final class _PrototypeCard extends StatelessWidget {
-  const _PrototypeCard({required this.child});
-
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        border: Border.all(color: FilaColors.line),
-        borderRadius: BorderRadius.circular(22),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x0D1D3024),
-            blurRadius: 20,
-            offset: Offset(0, 5),
-          ),
-        ],
-      ),
-      child: child,
     );
   }
 }
