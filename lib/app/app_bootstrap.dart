@@ -62,70 +62,84 @@ final class _FilaManagerBootstrapState extends State<FilaManagerBootstrap> {
       home: Scaffold(
         backgroundColor: FilaColors.canvas,
         body: SafeArea(
-          child: Center(
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 620),
-              child: Padding(
-                padding: const EdgeInsets.all(24),
-                child: _opening
-                    ? const Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          CircularProgressIndicator(),
-                          SizedBox(height: 16),
-                          Text('Opening local inventory'),
-                        ],
-                      )
-                    : Column(
-                        mainAxisSize: MainAxisSize.min,
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          const FilaEyebrow('Local inventory'),
-                          const SizedBox(height: 8),
-                          Semantics(
-                            liveRegion: true,
-                            header: true,
-                            child: Text(
-                              'Inventory could not be opened',
-                              style: Theme.of(context).textTheme.headlineMedium,
-                            ),
-                          ),
-                          const SizedBox(height: 18),
-                          const FilaCard(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
+          child: Column(
+            children: [
+              const FilaAppHeader(),
+              Expanded(
+                child: Center(
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 620),
+                    child: Padding(
+                      padding: const EdgeInsets.all(24),
+                      child: _opening
+                          ? const Column(
+                              mainAxisSize: MainAxisSize.min,
                               children: [
-                                Icon(
-                                  Icons.error_outline,
-                                  color: FilaColors.error,
+                                CircularProgressIndicator(),
+                                SizedBox(height: 16),
+                                Text('Opening local inventory'),
+                              ],
+                            )
+                          : Column(
+                              mainAxisSize: MainAxisSize.min,
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                const FilaEyebrow('Local inventory'),
+                                const SizedBox(height: 8),
+                                Semantics(
+                                  liveRegion: true,
+                                  header: true,
+                                  child: Text(
+                                    'Inventory could not be opened',
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .headlineMedium,
+                                  ),
                                 ),
-                                SizedBox(height: 10),
-                                Text(
-                                  'Local inventory data was left unchanged.',
+                                const SizedBox(height: 18),
+                                const FilaCard(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Icon(
+                                        Icons.error_outline,
+                                        color: FilaColors.error,
+                                      ),
+                                      SizedBox(height: 10),
+                                      Text(
+                                        'Local inventory data was left unchanged.',
+                                      ),
+                                      SizedBox(height: 6),
+                                      Text(
+                                        'Check device storage, then try again.',
+                                      ),
+                                    ],
+                                  ),
                                 ),
-                                SizedBox(height: 6),
-                                Text('Check device storage, then try again.'),
+                                const SizedBox(height: 18),
+                                FilledButton(
+                                  onPressed: _open,
+                                  child: const Text('Retry opening inventory'),
+                                ),
+                                ExpansionTile(
+                                  title: const Text('Diagnostics'),
+                                  children: [
+                                    Padding(
+                                      padding: const EdgeInsets.all(12),
+                                      child: SelectableText(
+                                        _openError.toString(),
+                                      ),
+                                    ),
+                                  ],
+                                ),
                               ],
                             ),
-                          ),
-                          const SizedBox(height: 18),
-                          FilledButton(
-                            onPressed: _open,
-                            child: const Text('Retry opening inventory'),
-                          ),
-                          ExpansionTile(
-                            title: const Text('Diagnostics'),
-                            children: [
-                              Padding(
-                                padding: const EdgeInsets.all(12),
-                                child: SelectableText(_openError.toString()),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
+                    ),
+                  ),
+                ),
               ),
-            ),
+            ],
           ),
         ),
       ),

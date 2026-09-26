@@ -58,3 +58,79 @@ final class FilaDetailRow extends StatelessWidget {
     ),
   );
 }
+
+final class FilaAppHeader extends StatelessWidget {
+  const FilaAppHeader({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 18, 20, 12),
+      child: Row(
+        children: [
+          Container(
+            width: 38,
+            height: 38,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: FilaColors.green,
+              borderRadius: BorderRadius.circular(13),
+            ),
+            child: const Text(
+              'F',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 18,
+                fontWeight: FontWeight.w900,
+                letterSpacing: -1.4,
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          const Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'FilaManager',
+                  style: TextStyle(
+                    color: FilaColors.ink,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: -0.5,
+                  ),
+                ),
+                Text(
+                  'Scan-led context',
+                  style: TextStyle(color: FilaColors.muted, fontSize: 12),
+                ),
+              ],
+            ),
+          ),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            decoration: BoxDecoration(
+              color: FilaColors.greenLight,
+              borderRadius: BorderRadius.circular(999),
+            ),
+            child: const Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.circle, size: 9, color: FilaColors.green),
+                SizedBox(width: 6),
+                Text(
+                  'Local',
+                  style: TextStyle(
+                    color: FilaColors.green,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}

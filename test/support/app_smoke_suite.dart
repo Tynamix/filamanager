@@ -147,28 +147,31 @@ void appSmokeSuite() {
     expect(find.text('Scan a storage-slot tag'), findsOneWidget);
   });
 
-  testWidgets('refuses a schema-3 store missing its filament spools', (
+  testWidgets('refuses a schema-3 store missing inventory collections', (
     tester,
   ) async {
     final file = File('${temporaryDirectory.path}/inventory.json');
-    const unreadable =
-        '{"schemaVersion":3,"storageSlots":[],"materialUnits":[]}';
-    await tester.runAsync(() => file.writeAsString(unreadable));
-
-    final startupFailure = await tester.runAsync<Object?>(() async {
-      try {
-        await AppDependencies.initialize(
-          inventoryStore: inventoryStoreFactory(),
-          nfcService: nfcService,
-          incomingLinkService: incomingLinkService,
-        );
-        return null;
-      } catch (error) {
-        return error;
-      }
-    });
-    expect(startupFailure, isA<FormatException>());
-    expect(await tester.runAsync(file.readAsString), unreadable);
+    for (final unreadable in [
+      '{"schemaVersion":3,"storageSlots":[],"materialUnits":[]}',
+      '{"schemaVersion":3,"materialUnits":[],"filamentSpools":[]}',
+      '{"schemaVersion":3,"storageSlots":[],"filamentSpools":[]}',
+    ]) {
+      await tester.runAsync(() => file.writeAsString(unreadable));
+      final startupFailure = await tester.runAsync<Object?>(() async {
+        try {
+          await AppDependencies.initialize(
+            inventoryStore: inventoryStoreFactory(),
+            nfcService: nfcService,
+            incomingLinkService: incomingLinkService,
+          );
+          return null;
+        } catch (error) {
+          return error;
+        }
+      });
+      expect(startupFailure, isA<FormatException>());
+      expect(await tester.runAsync(file.readAsString), unreadable);
+    }
   });
 
   testWidgets('shows recovery and retries after an unreadable local store', (
@@ -202,6 +205,9 @@ void appSmokeSuite() {
       findsOneWidget,
     );
     expect(find.text('Retry opening inventory'), findsOneWidget);
+    expect(find.text('FilaManager'), findsOneWidget);
+    expect(find.text('Scan-led context'), findsOneWidget);
+    expect(find.text('Local'), findsOneWidget);
     expect(find.text('Add filament spool'), findsNothing);
     expect(await tester.runAsync(file.readAsString), unreadable);
 
