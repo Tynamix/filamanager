@@ -28,6 +28,9 @@ abstract final class FilaTheme {
       outline: FilaColors.line,
     );
     final base = ThemeData(colorScheme: colorScheme, useMaterial3: true);
+    const buttonShape = RoundedRectangleBorder(
+      borderRadius: BorderRadius.all(Radius.circular(15)),
+    );
 
     return base.copyWith(
       scaffoldBackgroundColor: FilaColors.surface,
@@ -81,10 +84,30 @@ abstract final class FilaTheme {
       filledButtonTheme: FilledButtonThemeData(
         style: FilledButton.styleFrom(
           minimumSize: const Size(48, 48),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(15),
-          ),
+          shape: buttonShape,
           textStyle: const TextStyle(fontWeight: FontWeight.w800),
+        ),
+      ),
+      outlinedButtonTheme: OutlinedButtonThemeData(
+        style: OutlinedButton.styleFrom(
+          minimumSize: const Size(48, 48),
+          shape: buttonShape,
+          side: const BorderSide(color: FilaColors.line),
+          textStyle: const TextStyle(fontWeight: FontWeight.w800),
+        ),
+      ),
+      textButtonTheme: TextButtonThemeData(
+        style: TextButton.styleFrom(
+          minimumSize: const Size(48, 48),
+          shape: buttonShape,
+          textStyle: const TextStyle(fontWeight: FontWeight.w800),
+        ),
+      ),
+      bottomSheetTheme: const BottomSheetThemeData(
+        backgroundColor: FilaColors.surface,
+        showDragHandle: true,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
         ),
       ),
       snackBarTheme: SnackBarThemeData(

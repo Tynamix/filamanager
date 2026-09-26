@@ -148,8 +148,7 @@ final class _InventoryShellState extends State<_InventoryShell> {
                 materialUnits: widget.dependencies.inventory.materialUnits
                     .where((unit) => !unit.archived)
                     .toList(),
-                onAddStorageSlot: _createStorageSlot,
-                onAddMaterialUnit: _createMaterialUnit,
+                onAddPlace: _createPlace,
                 onOpenStorageSlot: _openStorageSlot,
                 onOpenMaterialUnit: _openMaterialUnit,
               ),
@@ -251,6 +250,23 @@ final class _InventoryShellState extends State<_InventoryShell> {
         _referenceError = null;
       }
     });
+  }
+
+  Future<void> _createPlace() async {
+    final kind = await showModalBottomSheet<_PlaceKind>(
+      context: context,
+      isScrollControlled: true,
+      builder: (context) => const _ChoosePlaceTypeSheet(),
+    );
+    if (!mounted) return;
+    switch (kind) {
+      case _PlaceKind.storageSlot:
+        await _createStorageSlot();
+      case _PlaceKind.materialUnit:
+        await _createMaterialUnit();
+      case null:
+        break;
+    }
   }
 
   Future<void> _createStorageSlot() async {
@@ -519,20 +535,95 @@ final class _ReferenceErrorView extends StatelessWidget {
   }
 }
 
+enum _PlaceKind { storageSlot, materialUnit }
+
+final class _ChoosePlaceTypeSheet extends StatelessWidget {
+  const _ChoosePlaceTypeSheet();
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.fromLTRB(20, 4, 20, 24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const _Eyebrow('New place'),
+            const SizedBox(height: 6),
+            Text(
+              'Choose place type',
+              style: Theme.of(context).textTheme.headlineMedium,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'What kind of position do you want to add?',
+              style: Theme.of(context).textTheme.bodyMedium,
+            ),
+            const SizedBox(height: 20),
+            _PlaceTypeTile(
+              icon: Icons.shelves,
+              title: 'Storage slot',
+              description: 'A permanent position for one filament spool',
+              onTap: () => Navigator.of(context).pop(_PlaceKind.storageSlot),
+            ),
+            const SizedBox(height: 12),
+            _PlaceTypeTile(
+              icon: Icons.view_module_outlined,
+              title: 'Material unit',
+              description: 'A holder with one or more material slots',
+              onTap: () => Navigator.of(context).pop(_PlaceKind.materialUnit),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+final class _PlaceTypeTile extends StatelessWidget {
+  const _PlaceTypeTile({
+    required this.icon,
+    required this.title,
+    required this.description,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String title;
+  final String description;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return _PrototypeCard(
+      child: Material(
+        color: Colors.transparent,
+        child: ListTile(
+          contentPadding: EdgeInsets.zero,
+          leading: Icon(icon, color: FilaColors.green),
+          title: Text(title, style: Theme.of(context).textTheme.titleMedium),
+          subtitle: Text(description),
+          trailing: const Icon(Icons.chevron_right),
+          onTap: onTap,
+        ),
+      ),
+    );
+  }
+}
+
 final class _PlacesView extends StatelessWidget {
   const _PlacesView({
     required this.storageSlots,
     required this.materialUnits,
-    required this.onAddStorageSlot,
-    required this.onAddMaterialUnit,
+    required this.onAddPlace,
     required this.onOpenStorageSlot,
     required this.onOpenMaterialUnit,
   });
 
   final List<StorageSlot> storageSlots;
   final List<MaterialUnit> materialUnits;
-  final Future<void> Function() onAddStorageSlot;
-  final Future<void> Function() onAddMaterialUnit;
+  final Future<void> Function() onAddPlace;
   final ValueChanged<StorageSlot> onOpenStorageSlot;
   final ValueChanged<MaterialUnit> onOpenMaterialUnit;
 
@@ -555,21 +646,13 @@ final class _PlacesView extends StatelessWidget {
               const SizedBox(height: 4),
               Text('Places', style: Theme.of(context).textTheme.displayMedium),
               const SizedBox(height: 16),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  FilledButton.icon(
-                    onPressed: onAddStorageSlot,
-                    icon: const Icon(Icons.add),
-                    label: const Text('Add storage slot'),
-                  ),
-                  OutlinedButton.icon(
-                    onPressed: onAddMaterialUnit,
-                    icon: const Icon(Icons.add),
-                    label: const Text('Add material unit'),
-                  ),
-                ],
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton.icon(
+                  onPressed: onAddPlace,
+                  icon: const Icon(Icons.add),
+                  label: const Text('Add place'),
+                ),
               ),
               const SizedBox(height: 20),
               if (storageSlots.isEmpty && materialUnits.isEmpty)
@@ -577,7 +660,7 @@ final class _PlacesView extends StatelessWidget {
                   child: _EmptyCardContent(
                     icon: Icons.shelves,
                     title: 'No storage slots or material units yet',
-                    message: 'Create a storage slot or material unit to get started.',
+                    message: 'Add a place to get started.',
                   ),
                 )
               else ...[
@@ -1276,8 +1359,10 @@ final class _CompactNavigation extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final labelHeight = MediaQuery.textScalerOf(context).scale(11) * 1.6;
+    final twoLineHeight = 20 + 3 + labelHeight * 2 + 12;
     return Container(
-      height: 70,
+      height: twoLineHeight > 70 ? twoLineHeight : 70,
       padding: const EdgeInsets.all(6),
       decoration: BoxDecoration(
         color: Colors.white.withValues(alpha: 0.96),
@@ -1344,6 +1429,8 @@ final class _CompactDestinationButton extends StatelessWidget {
                 const SizedBox(height: 3),
                 Text(
                   destination.label,
+                  maxLines: 2,
+                  textAlign: TextAlign.center,
                   style: TextStyle(
                     color: color,
                     fontSize: 11,

@@ -11,6 +11,56 @@ import 'package:flutter_test/flutter_test.dart';
 import '../support/app_smoke_suite.dart';
 
 void main() {
+  testWidgets('compact Places uses one add action with a place-type choice', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(360, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(
+      tester.binding.platformDispatcher.clearTextScaleFactorTestValue,
+    );
+
+    final nfc = FakeNfcService();
+    final links = FakeIncomingLinkService();
+    addTearDown(nfc.close);
+    addTearDown(links.close);
+    final app = await AppDependencies.initialize(
+      inventoryStore: FakeInventoryStore(),
+      nfcService: nfc,
+      incomingLinkService: links,
+    );
+    await tester.pumpWidget(FilaManagerApp(dependencies: app));
+    await tester.tap(find.text('Places'));
+    await tester.pumpAndSettle();
+
+    final addPlace = find.widgetWithText(FilledButton, 'Add place');
+    expect(addPlace, findsOneWidget);
+    expect(find.text('Add storage slot'), findsNothing);
+    expect(find.text('Add material unit'), findsNothing);
+
+    for (final width in [320.0, 360.0, 420.0, 700.0]) {
+      tester.view.physicalSize = Size(width, 800);
+      await tester.pumpAndSettle();
+      expect(addPlace, findsOneWidget);
+      expect(tester.getSize(addPlace).width, greaterThan(270));
+      expect(tester.takeException(), isNull);
+    }
+    tester.view.physicalSize = const Size(320, 800);
+    tester.binding.platformDispatcher.textScaleFactorTestValue = 1.4;
+    await tester.pumpAndSettle();
+    expect(addPlace, findsOneWidget);
+    expect(tester.takeException(), isNull);
+
+    await tester.tap(addPlace);
+    await tester.pumpAndSettle();
+    expect(find.text('Choose place type'), findsOneWidget);
+    expect(find.text('Storage slot'), findsOneWidget);
+    expect(find.text('Material unit'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('hobbyist can create and regroup a storage slot without NFC', (
     tester,
   ) async {
@@ -29,7 +79,9 @@ void main() {
     await tester.pumpWidget(FilaManagerApp(dependencies: app!));
     await tester.tap(find.text('Places'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Add storage slot'));
+    await tester.tap(find.text('Add place'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Storage slot'));
     await tester.pumpAndSettle();
     await tester.enterText(
       find.bySemanticsLabel('Storage-slot name'),
@@ -98,7 +150,9 @@ void main() {
     await tester.pumpWidget(FilaManagerApp(dependencies: app));
     await tester.tap(find.text('Places'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Add material unit'));
+    await tester.tap(find.text('Add place'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Material unit'));
     await tester.pumpAndSettle();
     await tester.enterText(find.bySemanticsLabel('Material-unit name'), 'AMS');
     await tester.enterText(

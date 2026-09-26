@@ -27,6 +27,24 @@ model.
 - Keep status pills, warnings, success messages, occupancy cards, spool color
   swatches, and non-color cues visually consistent with the prototype.
 
+## Control hierarchy and responsive layout
+
+- Give each screen one clear primary action. Use the same visual treatment for
+  choices with the same priority; use outlined or text controls for genuinely
+  secondary actions. Do not make one of two equivalent choices look like the
+  default decision.
+- When one action branches into several object types, show one entry action and
+  then a choice sheet with equally styled options. Continue into the existing
+  guided form only after the hobbyist chooses a type.
+- Build repeated controls from shared Flutter components and theme values so
+  color, typography, corner radius, padding, icon placement, and interaction
+  states remain consistent across screens.
+- At compact phone widths, keep the primary action stable and readable. Use a
+  choice sheet or menu when sibling actions would wrap into an accidental
+  vertical stack. Check changed action layouts at 320–420 logical pixels,
+  larger text scale, and at least 600 logical pixels; inspect the target device
+  when a layout problem was reported there.
+
 ## Production boundaries
 
 Reproduce the design in production Flutter components; do not copy the

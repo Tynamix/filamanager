@@ -470,7 +470,9 @@ Future<void> _createStorageSlotThroughUi(
   WidgetTester tester, {
   required String name,
 }) async {
-  await tester.tap(find.text('Add storage slot'));
+  await tester.tap(find.text('Add place'));
+  await _pumpInteraction(tester);
+  await tester.tap(find.text('Storage slot'));
   await _pumpInteraction(tester);
   await tester.enterText(find.bySemanticsLabel('Storage-slot name'), name);
   await tester.pump();

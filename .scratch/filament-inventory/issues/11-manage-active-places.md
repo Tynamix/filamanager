@@ -18,3 +18,7 @@
 ## Answer
 
 Storage slots and material units with named material slots can be created, browsed, and renamed manually. Name validation enforces the active scopes before an atomic local save. The versioned inventory store reads existing version-1 storage slots and saves the expanded model in version 2. Place identities and occupancy fields survive descriptive edits.
+
+## Comments
+
+- 2026-09-26: Pixel 9 review found that separate Add storage slot and Add material unit buttons used different visual weights and stacked awkwardly on the phone. Use one Add place action, followed by an equally styled place-type choice, and record reusable action-hierarchy and compact-layout rules in `docs/agents/ui.md`.
