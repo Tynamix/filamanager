@@ -141,8 +141,12 @@ final class _InventoryShellState extends State<_InventoryShell> {
             : _referenceError != null
             ? _ReferenceErrorView(title: _referenceError!)
             : _PlacesView(
-                storageSlots: widget.dependencies.inventory.storageSlots,
-                materialUnits: widget.dependencies.inventory.materialUnits,
+                storageSlots: widget.dependencies.inventory.storageSlots
+                    .where((slot) => !slot.archived)
+                    .toList(),
+                materialUnits: widget.dependencies.inventory.materialUnits
+                    .where((unit) => !unit.archived)
+                    .toList(),
                 onAddStorageSlot: _createStorageSlot,
                 onAddMaterialUnit: _createMaterialUnit,
                 onOpenStorageSlot: _openStorageSlot,
@@ -533,6 +537,13 @@ final class _PlacesView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final areas = <String, String?>{};
+    for (final slot in storageSlots) {
+      areas.putIfAbsent(
+        (slot.area ?? '').trim().toLowerCase(),
+        () => slot.area,
+      );
+    }
     return SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(18, 20, 18, 24),
       child: Align(
@@ -573,17 +584,16 @@ final class _PlacesView extends StatelessWidget {
                 )
               else ...[
                 if (storageSlots.isNotEmpty) const _Eyebrow('Storage slots'),
-                for (final area in {
-                  for (final slot in storageSlots) slot.area,
-                }) ...[
+                for (final area in areas.entries) ...[
                   const SizedBox(height: 12),
                   Text(
-                    area ?? 'No storage area',
+                    area.value ?? 'No storage area',
                     style: Theme.of(context).textTheme.titleMedium,
                   ),
                   const SizedBox(height: 8),
                   for (final storageSlot in storageSlots.where(
-                    (slot) => slot.area == area,
+                    (slot) =>
+                        (slot.area ?? '').trim().toLowerCase() == area.key,
                   )) ...[
                     _PrototypeCard(
                       child: Material(
@@ -668,7 +678,7 @@ final class _StorageSlotContextView extends StatelessWidget {
                 style: Theme.of(context).textTheme.displayMedium,
               ),
               const SizedBox(height: 10),
-              Text(storageSlot.archived ? 'Archived' : 'Active'),
+              _PlaceStatusPill(archived: storageSlot.archived),
               if (storageSlot.area != null) Text(storageSlot.area!),
               const SizedBox(height: 20),
               _PrototypeCard(
@@ -733,20 +743,18 @@ final class _MaterialUnitContextView extends StatelessWidget {
                 style: Theme.of(context).textTheme.displayMedium,
               ),
               const SizedBox(height: 10),
-              Text(materialUnit.archived ? 'Archived' : 'Active'),
+              _PlaceStatusPill(archived: materialUnit.archived),
               const SizedBox(height: 20),
-              for (final slot in materialUnit.slots) ...[
+              for (final slot in materialUnit.slots.where(
+                (slot) => !slot.archived,
+              )) ...[
                 _PrototypeCard(
                   child: ListTile(
                     contentPadding: EdgeInsets.zero,
                     leading: const Icon(Icons.view_module_outlined),
                     title: Text(slot.name),
                     subtitle: Text(
-                      'Material slot · ${slot.archived
-                          ? 'Archived'
-                          : slot.occupantId == null
-                          ? 'Empty'
-                          : 'Occupied'}',
+                      'Material slot · Active · ${slot.occupantId == null ? 'Empty' : 'Occupied'}',
                     ),
                   ),
                 ),
@@ -872,6 +880,100 @@ final class _WriteTagProgressSheetState extends State<_WriteTagProgressSheet> {
   }
 }
 
+final class _PlaceReview extends StatelessWidget {
+  const _PlaceReview({
+    required this.kind,
+    required this.nameLabel,
+    required this.name,
+    required this.creating,
+    required this.saving,
+    required this.details,
+    required this.onConfirm,
+    required this.onBack,
+  });
+
+  final String kind;
+  final String nameLabel;
+  final String name;
+  final bool creating;
+  final bool saving;
+  final List<Widget> details;
+  final VoidCallback onConfirm;
+  final VoidCallback onBack;
+
+  @override
+  Widget build(BuildContext context) {
+    final action = creating ? 'Create' : 'Save';
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _Eyebrow('Review $kind'),
+        const SizedBox(height: 6),
+        Text(
+          '$action this $kind?',
+          style: Theme.of(context).textTheme.headlineMedium,
+        ),
+        const SizedBox(height: 18),
+        _PrototypeCard(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _Eyebrow(nameLabel),
+              const SizedBox(height: 4),
+              Text(name, style: Theme.of(context).textTheme.titleMedium),
+              ...details,
+            ],
+          ),
+        ),
+        const SizedBox(height: 12),
+        const Text('No inventory changes have been made.'),
+        const SizedBox(height: 18),
+        FilledButton(
+          onPressed: saving ? null : onConfirm,
+          child: Text('$action $kind'),
+        ),
+        TextButton(onPressed: onBack, child: const Text('Back to edit')),
+      ],
+    );
+  }
+}
+
+final class _PlaceSheetError extends StatelessWidget {
+  const _PlaceSheetError(this.message);
+
+  final String message;
+
+  @override
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      const SizedBox(height: 12),
+      Text(
+        message,
+        style: TextStyle(color: Theme.of(context).colorScheme.error),
+      ),
+      const Text('No inventory changes were made.'),
+    ],
+  );
+}
+
+Future<void> _submitPlace<T>({
+  required BuildContext context,
+  required Future<T> Function() save,
+  required void Function(String) onError,
+  required String kind,
+}) async {
+  try {
+    final result = await save();
+    if (context.mounted) Navigator.of(context).pop(result);
+  } on PlaceValidationException catch (error) {
+    if (context.mounted) onError(error.message);
+  } catch (_) {
+    if (context.mounted) onError('Could not save $kind. Try again.');
+  }
+}
+
 final class _StorageSlotSheet extends StatefulWidget {
   const _StorageSlotSheet({this.initial, required this.onSave});
 
@@ -920,48 +1022,22 @@ final class _StorageSlotSheetState extends State<_StorageSlotSheet> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: _reviewing
                 ? [
-                    const _Eyebrow('Review storage slot'),
-                    const SizedBox(height: 6),
-                    Text(
-                      widget.initial == null
-                          ? 'Create this storage slot?'
-                          : 'Save this storage slot?',
-                      style: Theme.of(context).textTheme.headlineMedium,
-                    ),
-                    const SizedBox(height: 18),
-                    _PrototypeCard(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const _Eyebrow('Storage-slot name'),
+                    _PlaceReview(
+                      kind: 'storage slot',
+                      nameLabel: 'Storage-slot name',
+                      name: name,
+                      creating: widget.initial == null,
+                      saving: _saving,
+                      onConfirm: _submit,
+                      onBack: () => setState(() => _reviewing = false),
+                      details: [
+                        if (_areaController.text.trim().isNotEmpty) ...[
+                          const SizedBox(height: 12),
+                          const _Eyebrow('Storage area'),
                           const SizedBox(height: 4),
-                          Text(
-                            name,
-                            style: Theme.of(context).textTheme.titleMedium,
-                          ),
-                          if (_areaController.text.trim().isNotEmpty) ...[
-                            const SizedBox(height: 12),
-                            const _Eyebrow('Storage area'),
-                            const SizedBox(height: 4),
-                            Text(_areaController.text.trim()),
-                          ],
+                          Text(_areaController.text.trim()),
                         ],
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    const Text('No inventory changes have been made.'),
-                    const SizedBox(height: 18),
-                    FilledButton(
-                      onPressed: _saving ? null : _submit,
-                      child: Text(
-                        widget.initial == null
-                            ? 'Create storage slot'
-                            : 'Save storage slot',
-                      ),
-                    ),
-                    TextButton(
-                      onPressed: () => setState(() => _reviewing = false),
-                      child: const Text('Back to edit'),
+                      ],
                     ),
                   ]
                 : [
@@ -991,16 +1067,7 @@ final class _StorageSlotSheetState extends State<_StorageSlotSheet> {
                       ),
                       onChanged: (_) => setState(() => _error = null),
                     ),
-                    if (_error != null) ...[
-                      const SizedBox(height: 12),
-                      Text(
-                        _error!,
-                        style: TextStyle(
-                          color: Theme.of(context).colorScheme.error,
-                        ),
-                      ),
-                      const Text('No inventory changes were made.'),
-                    ],
+                    if (_error != null) ...[_PlaceSheetError(_error!)],
                     const SizedBox(height: 18),
                     OutlinedButton(
                       onPressed: _review,
@@ -1024,31 +1091,16 @@ final class _StorageSlotSheetState extends State<_StorageSlotSheet> {
 
   Future<void> _submit() async {
     setState(() => _saving = true);
-    try {
-      final result = await widget.onSave(
-        _nameController.text,
-        _areaController.text,
-      );
-      if (mounted) {
-        Navigator.of(context).pop(result);
-      }
-    } on PlaceValidationException catch (error) {
-      if (mounted) {
-        setState(() {
-          _error = error.message;
-          _reviewing = false;
-          _saving = false;
-        });
-      }
-    } catch (_) {
-      if (mounted) {
-        setState(() {
-          _error = 'Could not save storage slot. Try again.';
-          _reviewing = false;
-          _saving = false;
-        });
-      }
-    }
+    await _submitPlace(
+      context: context,
+      kind: 'storage slot',
+      save: () => widget.onSave(_nameController.text, _areaController.text),
+      onError: (message) => setState(() {
+        _error = message;
+        _reviewing = false;
+        _saving = false;
+      }),
+    );
   }
 }
 
@@ -1105,48 +1157,22 @@ final class _MaterialUnitSheetState extends State<_MaterialUnitSheet> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: _reviewing
               ? [
-                  const _Eyebrow('Review material unit'),
-                  const SizedBox(height: 6),
-                  Text(
-                    widget.initial == null
-                        ? 'Create this material unit?'
-                        : 'Save this material unit?',
-                    style: Theme.of(context).textTheme.headlineMedium,
-                  ),
-                  const SizedBox(height: 18),
-                  _PrototypeCard(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const _Eyebrow('Material-unit name'),
+                  _PlaceReview(
+                    kind: 'material unit',
+                    nameLabel: 'Material-unit name',
+                    name: _nameController.text.trim(),
+                    creating: widget.initial == null,
+                    saving: _saving,
+                    onConfirm: _submit,
+                    onBack: () => setState(() => _reviewing = false),
+                    details: [
+                      const SizedBox(height: 12),
+                      const _Eyebrow('Material slots'),
+                      for (final controller in _slotControllers) ...[
                         const SizedBox(height: 4),
-                        Text(
-                          _nameController.text.trim(),
-                          style: Theme.of(context).textTheme.titleMedium,
-                        ),
-                        const SizedBox(height: 12),
-                        const _Eyebrow('Material slots'),
-                        for (final controller in _slotControllers) ...[
-                          const SizedBox(height: 4),
-                          Text(controller.text.trim()),
-                        ],
+                        Text(controller.text.trim()),
                       ],
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  const Text('No inventory changes have been made.'),
-                  const SizedBox(height: 18),
-                  FilledButton(
-                    onPressed: _saving ? null : _submit,
-                    child: Text(
-                      widget.initial == null
-                          ? 'Create material unit'
-                          : 'Save material unit',
-                    ),
-                  ),
-                  TextButton(
-                    onPressed: () => setState(() => _reviewing = false),
-                    child: const Text('Back to edit'),
+                    ],
                   ),
                 ]
               : [
@@ -1199,16 +1225,7 @@ final class _MaterialUnitSheetState extends State<_MaterialUnitSheet> {
                         child: const Text('Remove last slot'),
                       ),
                   ],
-                  if (_error != null) ...[
-                    const SizedBox(height: 12),
-                    Text(
-                      _error!,
-                      style: TextStyle(
-                        color: Theme.of(context).colorScheme.error,
-                      ),
-                    ),
-                    const Text('No inventory changes were made.'),
-                  ],
+                  if (_error != null) ...[_PlaceSheetError(_error!)],
                   const SizedBox(height: 18),
                   OutlinedButton(
                     onPressed: _review,
@@ -1234,30 +1251,18 @@ final class _MaterialUnitSheetState extends State<_MaterialUnitSheet> {
 
   Future<void> _submit() async {
     setState(() => _saving = true);
-    try {
-      final result = await widget.onSave(_nameController.text, [
+    await _submitPlace(
+      context: context,
+      kind: 'material unit',
+      save: () => widget.onSave(_nameController.text, [
         for (final controller in _slotControllers) controller.text,
-      ]);
-      if (mounted) {
-        Navigator.of(context).pop(result);
-      }
-    } on PlaceValidationException catch (error) {
-      if (mounted) {
-        setState(() {
-          _error = error.message;
-          _reviewing = false;
-          _saving = false;
-        });
-      }
-    } catch (_) {
-      if (mounted) {
-        setState(() {
-          _error = 'Could not save material unit. Try again.';
-          _reviewing = false;
-          _saving = false;
-        });
-      }
-    }
+      ]),
+      onError: (message) => setState(() {
+        _error = message;
+        _reviewing = false;
+        _saving = false;
+      }),
+    );
   }
 }
 
@@ -1660,6 +1665,38 @@ final class _Eyebrow extends StatelessWidget {
         fontSize: 11,
         fontWeight: FontWeight.w800,
         letterSpacing: 1.1,
+      ),
+    );
+  }
+}
+
+final class _PlaceStatusPill extends StatelessWidget {
+  const _PlaceStatusPill({required this.archived});
+
+  final bool archived;
+
+  @override
+  Widget build(BuildContext context) {
+    final label = archived ? 'Archived' : 'Active';
+    return Semantics(
+      label: 'Place status: $label',
+      child: ExcludeSemantics(
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+          decoration: BoxDecoration(
+            color: archived ? FilaColors.canvas : FilaColors.greenLight,
+            borderRadius: BorderRadius.circular(999),
+            border: Border.all(color: FilaColors.line),
+          ),
+          child: Text(
+            label,
+            style: TextStyle(
+              color: archived ? FilaColors.muted : FilaColors.green,
+              fontWeight: FontWeight.w800,
+              fontSize: 12,
+            ),
+          ),
+        ),
       ),
     );
   }

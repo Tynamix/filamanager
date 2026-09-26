@@ -1,5 +1,10 @@
 import 'package:filamanager/app/app.dart';
 import 'package:filamanager/app/app_dependencies.dart';
+import 'package:filamanager/inventory/storage_slot.dart';
+import 'package:filamanager/inventory/storage_slot_id.dart';
+import 'package:filamanager/inventory/material_unit.dart';
+import 'package:filamanager/inventory/place_id.dart';
+import 'package:filamanager/persistence/inventory_store.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -47,6 +52,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Workshop'), findsOneWidget);
     expect(find.text('Active'), findsOneWidget);
+    expect(find.bySemanticsLabel('Place status: Active'), findsOneWidget);
     expect(find.text('Empty'), findsOneWidget);
 
     await tester.tap(find.text('Edit storage slot'));
@@ -113,7 +119,7 @@ void main() {
     expect(find.text('Left'), findsOneWidget);
     expect(find.text('Right'), findsOneWidget);
     expect(find.text('Active'), findsOneWidget);
-    expect(find.text('Material slot · Empty'), findsNWidgets(2));
+    expect(find.text('Material slot · Active · Empty'), findsNWidgets(2));
 
     await tester.tap(find.text('Edit material unit'));
     await tester.pumpAndSettle();
@@ -133,4 +139,104 @@ void main() {
     expect(find.text('Rear'), findsOneWidget);
     expect((await store.open()).materialUnits.single.slots[1].name, 'Rear');
   });
+
+  testWidgets('storage slots with case-varied area labels browse together', (
+    tester,
+  ) async {
+    final store = _SeededInventoryStore(
+      InventoryDocument(
+        schemaVersion: 2,
+        storageSlots: [
+          StorageSlot(
+            id: StorageSlotId.parse('AbCdEfGhIjKlMnOpQrStUv'),
+            name: 'Shelf A',
+            area: 'Workshop',
+          ),
+          StorageSlot(
+            id: StorageSlotId.parse('ZyXwVuTsRqPoNmLkJiHgFe'),
+            name: 'Shelf B',
+            area: 'workshop',
+          ),
+        ],
+      ),
+    );
+    final nfc = FakeNfcService();
+    final links = FakeIncomingLinkService();
+    addTearDown(nfc.close);
+    addTearDown(links.close);
+    final app = await AppDependencies.initialize(
+      inventoryStore: store,
+      nfcService: nfc,
+      incomingLinkService: links,
+    );
+    await tester.pumpWidget(FilaManagerApp(dependencies: app));
+    await tester.tap(find.text('Places'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Workshop'), findsOneWidget);
+    expect(find.text('workshop'), findsNothing);
+    expect(find.text('Shelf A'), findsOneWidget);
+    expect(find.text('Shelf B'), findsOneWidget);
+  });
+
+  testWidgets('active Places browsing hides archived places', (tester) async {
+    final store = _SeededInventoryStore(
+      InventoryDocument(
+        schemaVersion: 2,
+        storageSlots: [
+          StorageSlot(
+            id: StorageSlotId.parse('AbCdEfGhIjKlMnOpQrStUv'),
+            name: 'Active shelf',
+          ),
+          StorageSlot(
+            id: StorageSlotId.parse('ZyXwVuTsRqPoNmLkJiHgFe'),
+            name: 'Archived shelf',
+            archived: true,
+          ),
+        ],
+        materialUnits: [
+          MaterialUnit(
+            id: PlaceId.parse('AaBbCcDdEeFfGgHhIiJjKk'),
+            name: 'Archived holder',
+            archived: true,
+            slots: [
+              MaterialSlot(
+                id: PlaceId.parse('QqWwEeRrTtYyUuIiOoPpAa'),
+                name: 'Slot 1',
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+    final nfc = FakeNfcService();
+    final links = FakeIncomingLinkService();
+    addTearDown(nfc.close);
+    addTearDown(links.close);
+    final app = await AppDependencies.initialize(
+      inventoryStore: store,
+      nfcService: nfc,
+      incomingLinkService: links,
+    );
+    await tester.pumpWidget(FilaManagerApp(dependencies: app));
+    await tester.tap(find.text('Places'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Active shelf'), findsOneWidget);
+    expect(find.text('Archived shelf'), findsNothing);
+    expect(find.text('Archived holder'), findsNothing);
+  });
+}
+
+final class _SeededInventoryStore implements InventoryStore {
+  _SeededInventoryStore(this.inventory);
+  InventoryDocument inventory;
+
+  @override
+  Future<InventoryDocument> open() async => inventory;
+
+  @override
+  Future<void> save(InventoryDocument inventory) async {
+    this.inventory = inventory;
+  }
 }
