@@ -62,3 +62,12 @@ The integration harness uses the real versioned JSON inventory store in a
 temporary directory and deterministic application-owned NFC and incoming-link
 adapters. This keeps the rendered application behavior identical while making
 external events repeatable.
+
+## Pull request reviews
+
+The `OpenCode PR review` GitHub Action reviews same-repository pull requests
+when they are opened, updated, reopened, or marked ready for review. It skips
+Renovate and fork pull requests. Add an `OPENROUTER_API_KEY` Actions secret in
+the GitHub repository settings to enable it. The workflow uses the OpenRouter
+model and pinned OpenCode action specified in
+[`.github/workflows/opencode-review.yml`](.github/workflows/opencode-review.yml).
