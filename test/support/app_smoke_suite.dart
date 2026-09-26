@@ -18,6 +18,7 @@ const _storageSlotUri =
 void appSmokeSuite({bool useProductionStore = false}) {
   late Directory temporaryDirectory;
   late InventoryStore Function() inventoryStoreFactory;
+  late _SaveSignal saveSignal;
   late FakeNfcService nfcService;
   late FakeIncomingLinkService incomingLinkService;
 
@@ -27,12 +28,16 @@ void appSmokeSuite({bool useProductionStore = false}) {
     );
     nfcService = FakeNfcService();
     incomingLinkService = FakeIncomingLinkService();
+    saveSignal = _SaveSignal();
     if (useProductionStore) {
-      inventoryStoreFactory = () =>
-          JsonInventoryStore(File('${temporaryDirectory.path}/inventory.json'));
+      inventoryStoreFactory = () => _SignalingInventoryStore(
+        JsonInventoryStore(File('${temporaryDirectory.path}/inventory.json')),
+        saveSignal,
+      );
     } else {
       final inventoryStore = FakeInventoryStore();
-      inventoryStoreFactory = () => inventoryStore;
+      inventoryStoreFactory = () =>
+          _SignalingInventoryStore(inventoryStore, saveSignal);
     }
   });
 
@@ -156,10 +161,14 @@ void appSmokeSuite({bool useProductionStore = false}) {
 
     await tester.tap(find.text('Places'));
     await _pumpInteraction(tester);
-    await _createStorageSlotThroughUi(tester, name: 'Shelf A · 01');
+    await _createStorageSlotThroughUi(
+      tester,
+      name: 'Shelf A · 01',
+      saveSignal: saveSignal,
+    );
 
     expect(find.text('Shelf A · 01'), findsOneWidget);
-    expect(find.text('READ-ONLY STORAGE-SLOT CONTEXT'), findsOneWidget);
+    expect(find.text('STORAGE SLOT'), findsOneWidget);
     expect(find.text('Empty'), findsOneWidget);
 
     await tester.pumpWidget(const SizedBox.shrink());
@@ -176,7 +185,7 @@ void appSmokeSuite({bool useProductionStore = false}) {
     await _pumpInteraction(tester);
 
     expect(find.text('Shelf A · 01'), findsOneWidget);
-    expect(find.text('READ-ONLY STORAGE-SLOT CONTEXT'), findsOneWidget);
+    expect(find.text('STORAGE SLOT'), findsOneWidget);
   });
 
   testWidgets('opens the same storage-slot context from NFC and a link', (
@@ -190,7 +199,11 @@ void appSmokeSuite({bool useProductionStore = false}) {
     );
     await tester.tap(find.text('Places'));
     await _pumpInteraction(tester);
-    await _createStorageSlotThroughUi(tester, name: 'Shelf A · 01');
+    await _createStorageSlotThroughUi(
+      tester,
+      name: 'Shelf A · 01',
+      saveSignal: saveSignal,
+    );
 
     await tester.binding.handlePopRoute();
     await _pumpInteraction(tester);
@@ -198,7 +211,7 @@ void appSmokeSuite({bool useProductionStore = false}) {
     await _pumpInteraction(tester);
 
     expect(find.text('Shelf A · 01'), findsOneWidget);
-    expect(find.text('READ-ONLY STORAGE-SLOT CONTEXT'), findsOneWidget);
+    expect(find.text('STORAGE SLOT'), findsOneWidget);
     expect(find.text('Empty'), findsOneWidget);
 
     await tester.binding.handlePopRoute();
@@ -207,7 +220,7 @@ void appSmokeSuite({bool useProductionStore = false}) {
     await _pumpInteraction(tester);
 
     expect(find.text('Shelf A · 01'), findsOneWidget);
-    expect(find.text('READ-ONLY STORAGE-SLOT CONTEXT'), findsOneWidget);
+    expect(find.text('STORAGE SLOT'), findsOneWidget);
     expect(find.text('Empty'), findsOneWidget);
   });
 
@@ -271,7 +284,11 @@ void appSmokeSuite({bool useProductionStore = false}) {
     );
     await tester.tap(find.text('Places'));
     await _pumpInteraction(tester);
-    await _createStorageSlotThroughUi(tester, name: 'Shelf A · 01');
+    await _createStorageSlotThroughUi(
+      tester,
+      name: 'Shelf A · 01',
+      saveSignal: saveSignal,
+    );
 
     await tester.pumpWidget(const SizedBox.shrink());
     await _pumpInteraction(tester);
@@ -284,7 +301,7 @@ void appSmokeSuite({bool useProductionStore = false}) {
     );
 
     expect(find.text('Shelf A · 01'), findsOneWidget);
-    expect(find.text('READ-ONLY STORAGE-SLOT CONTEXT'), findsOneWidget);
+    expect(find.text('STORAGE SLOT'), findsOneWidget);
 
     incomingLinkService
       ..emit(Uri.parse(_storageSlotUri))
@@ -311,7 +328,11 @@ void appSmokeSuite({bool useProductionStore = false}) {
     );
     await tester.tap(find.text('Places'));
     await _pumpInteraction(tester);
-    await _createStorageSlotThroughUi(tester, name: 'Shelf A · 01');
+    await _createStorageSlotThroughUi(
+      tester,
+      name: 'Shelf A · 01',
+      saveSignal: saveSignal,
+    );
 
     await tester.tap(find.text('Register NFC tag'));
     await _pumpInteraction(tester);
@@ -343,7 +364,11 @@ void appSmokeSuite({bool useProductionStore = false}) {
     );
     await tester.tap(find.text('Places'));
     await _pumpInteraction(tester);
-    await _createStorageSlotThroughUi(tester, name: 'Shelf A · 01');
+    await _createStorageSlotThroughUi(
+      tester,
+      name: 'Shelf A · 01',
+      saveSignal: saveSignal,
+    );
 
     nfcService.availabilityState = NfcAvailability.disabled;
     await tester.tap(find.text('Register NFC tag'));
@@ -404,7 +429,11 @@ void appSmokeSuite({bool useProductionStore = false}) {
     );
     await tester.tap(find.text('Places'));
     await _pumpInteraction(tester);
-    await _createStorageSlotThroughUi(tester, name: 'Shelf A · 01');
+    await _createStorageSlotThroughUi(
+      tester,
+      name: 'Shelf A · 01',
+      saveSignal: saveSignal,
+    );
 
     nfcService.pendingWrite = Completer<NfcWriteResult>();
     await tester.tap(find.text('Register NFC tag'));
@@ -469,6 +498,7 @@ void appSmokeSuite({bool useProductionStore = false}) {
 Future<void> _createStorageSlotThroughUi(
   WidgetTester tester, {
   required String name,
+  required _SaveSignal saveSignal,
 }) async {
   await tester.tap(find.text('Add place'));
   await _pumpInteraction(tester);
@@ -489,11 +519,10 @@ Future<void> _createStorageSlotThroughUi(
   expect(find.text('No inventory changes have been made.'), findsOneWidget);
 
   final createButton = find.widgetWithText(FilledButton, 'Create storage slot');
+  final saved = saveSignal.nextSave;
   await tester.runAsync(() => tester.tap(createButton));
+  await tester.runAsync(() => saved);
   await tester.pumpAndSettle();
-  await tester.runAsync(
-    () => Future<void>.delayed(const Duration(milliseconds: 50)),
-  );
   await _pumpInteraction(tester);
 }
 
@@ -517,7 +546,9 @@ Future<void> _launchApp(
 }
 
 final class FakeInventoryStore implements InventoryStore {
-  InventoryDocument _inventory = const InventoryDocument(schemaVersion: 1);
+  InventoryDocument _inventory = const InventoryDocument(
+    schemaVersion: JsonInventoryStore.currentSchemaVersion,
+  );
 
   @override
   Future<InventoryDocument> open() async => _inventory;
@@ -525,6 +556,33 @@ final class FakeInventoryStore implements InventoryStore {
   @override
   Future<void> save(InventoryDocument inventory) async {
     _inventory = inventory;
+  }
+}
+
+final class _SaveSignal {
+  Completer<void> _next = Completer<void>();
+
+  Future<void> get nextSave => _next.future;
+
+  void saved() {
+    _next.complete();
+    _next = Completer<void>();
+  }
+}
+
+final class _SignalingInventoryStore implements InventoryStore {
+  _SignalingInventoryStore(this.delegate, this.signal);
+
+  final InventoryStore delegate;
+  final _SaveSignal signal;
+
+  @override
+  Future<InventoryDocument> open() => delegate.open();
+
+  @override
+  Future<void> save(InventoryDocument inventory) async {
+    await delegate.save(inventory);
+    signal.saved();
   }
 }
 

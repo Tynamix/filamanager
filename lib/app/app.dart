@@ -432,6 +432,7 @@ final class _InventoryShellState extends State<_InventoryShell> {
       context: context,
       isDismissible: false,
       enableDrag: false,
+      showDragHandle: false,
       builder: (context) => _WriteTagProgressSheet(
         result: resultFuture,
         onCancel: widget.dependencies.nfcService.cancelSession,
@@ -710,7 +711,7 @@ final class _PlacesView extends StatelessWidget {
                           leading: const Icon(Icons.view_module_outlined),
                           title: Text(unit.name),
                           subtitle: Text(
-                            '${unit.slots.length} material ${unit.slots.length == 1 ? 'slot' : 'slots'} · ${unit.archived ? 'Archived' : 'Active'}',
+                            '${unit.activeSlots.length} material ${unit.activeSlots.length == 1 ? 'slot' : 'slots'} · ${unit.archived ? 'Archived' : 'Active'}',
                           ),
                           trailing: const Icon(Icons.chevron_right),
                           onTap: () => onOpenMaterialUnit(unit),
@@ -751,7 +752,7 @@ final class _StorageSlotContextView extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const _Eyebrow('Read-only storage-slot context'),
+              const _Eyebrow('Storage slot'),
               const SizedBox(height: 4),
               Text(
                 storageSlot.name,
@@ -825,9 +826,7 @@ final class _MaterialUnitContextView extends StatelessWidget {
               const SizedBox(height: 10),
               _PlaceStatusPill(archived: materialUnit.archived),
               const SizedBox(height: 20),
-              for (final slot in materialUnit.slots.where(
-                (slot) => !slot.archived,
-              )) ...[
+              for (final slot in materialUnit.activeSlots) ...[
                 _PrototypeCard(
                   child: ListTile(
                     contentPadding: EdgeInsets.zero,
@@ -1025,16 +1024,20 @@ final class _PlaceSheetError extends StatelessWidget {
   final String message;
 
   @override
-  Widget build(BuildContext context) => Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      const SizedBox(height: 12),
-      Text(
-        message,
-        style: TextStyle(color: Theme.of(context).colorScheme.error),
-      ),
-      const Text('No inventory changes were made.'),
-    ],
+  Widget build(BuildContext context) => Semantics(
+    container: true,
+    liveRegion: true,
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SizedBox(height: 12),
+        Text(
+          message,
+          style: TextStyle(color: Theme.of(context).colorScheme.error),
+        ),
+        const Text('No inventory changes were made.'),
+      ],
+    ),
   );
 }
 

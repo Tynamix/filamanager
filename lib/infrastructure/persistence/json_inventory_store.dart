@@ -68,7 +68,7 @@ final class JsonInventoryStore implements InventoryStore {
     await file.parent.create(recursive: true);
     final temporaryFile = File('${file.path}.tmp');
     final contents = jsonEncode(<String, Object>{
-      'schemaVersion': inventory.schemaVersion,
+      'schemaVersion': currentSchemaVersion,
       'storageSlots': [
         for (final storageSlot in inventory.storageSlots) storageSlot.toJson(),
       ],

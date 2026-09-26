@@ -191,8 +191,8 @@ final class AppDependencies {
     if (name.isEmpty) {
       throw PlaceValidationException('$label is required.');
     }
-    if (name.length > 80 ||
-        name.runes.any((rune) => rune < 32 || rune == 127)) {
+    if (name.runes.length > 80 ||
+        name.runes.any((rune) => rune < 32 || (rune >= 127 && rune <= 159))) {
       throw PlaceValidationException(
         '$label must be at most 80 characters without control characters.',
       );

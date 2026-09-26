@@ -63,6 +63,9 @@ final class MaterialUnit {
   final List<MaterialSlot> slots;
   final bool archived;
 
+  Iterable<MaterialSlot> get activeSlots =>
+      slots.where((slot) => !slot.archived);
+
   MaterialUnit renamed(String name, List<MaterialSlot> slots) =>
       MaterialUnit(id: id, name: name, slots: slots, archived: archived);
 

@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:filamanager/app/app_dependencies.dart';
 import 'package:filamanager/infrastructure/persistence/json_inventory_store.dart';
+import 'package:filamanager/inventory/material_unit.dart';
 import 'package:filamanager/inventory/storage_slot_id.dart';
 import 'package:filamanager/inventory/storage_slot.dart';
 import 'package:filamanager/persistence/inventory_store.dart';
@@ -71,7 +72,7 @@ void main() {
       final id = StorageSlotId.parse('AbCdEfGhIjKlMnOpQrStUv');
       await store.save(
         InventoryDocument(
-          schemaVersion: 1,
+          schemaVersion: JsonInventoryStore.currentSchemaVersion,
           storageSlots: [
             StorageSlot(
               id: id,
@@ -152,9 +153,32 @@ void main() {
       incomingLinkService: links,
     );
     final unit = await app.createMaterialUnit('AMS', ['A', 'B']);
+    await JsonInventoryStore(file).save(
+      app.inventory.copyWith(
+        materialUnits: [
+          MaterialUnit(
+            id: unit.id,
+            name: unit.name,
+            slots: [
+              MaterialSlot(
+                id: unit.slots[0].id,
+                name: unit.slots[0].name,
+                occupantId: 'spool-1',
+              ),
+              unit.slots[1],
+            ],
+          ),
+        ],
+      ),
+    );
+    final reopenedApp = await AppDependencies.initialize(
+      inventoryStore: JsonInventoryStore(file),
+      nfcService: nfc,
+      incomingLinkService: links,
+    );
 
     await expectLater(
-      app.renameMaterialUnit(
+      reopenedApp.renameMaterialUnit(
         unit.id,
         'AMS 2',
         slotNames: {unit.slots[0].id: 'B'},
@@ -165,7 +189,7 @@ void main() {
       (await JsonInventoryStore(file).open()).materialUnits.single.name,
       'AMS',
     );
-    final renamed = await app.renameMaterialUnit(
+    final renamed = await reopenedApp.renameMaterialUnit(
       unit.id,
       ' AMS 2 ',
       slotNames: {unit.slots[0].id: 'Left'},
@@ -176,11 +200,13 @@ void main() {
       unit.slots.map((slot) => slot.id),
     );
     expect(renamed.slots.map((slot) => slot.name), ['Left', 'B']);
+    expect(renamed.slots.first.occupantId, 'spool-1');
     final reopened = (await JsonInventoryStore(
       file,
     ).open()).materialUnits.single;
     expect(reopened.name, 'AMS 2');
     expect(reopened.slots.map((slot) => slot.name), ['Left', 'B']);
+    expect(reopened.slots.first.occupantId, 'spool-1');
   });
 
   test('archived storage slots do not compete for active names', () async {
@@ -223,4 +249,104 @@ void main() {
     expect(renamed.name, 'Shelf');
     expect((await JsonInventoryStore(file).open()).storageSlots, hasLength(2));
   });
+
+  test(
+    'name limit counts Unicode characters rather than UTF-16 units',
+    () async {
+      final store = FakeInventoryStore();
+      final nfc = FakeNfcService();
+      final links = FakeIncomingLinkService();
+      addTearDown(nfc.close);
+      addTearDown(links.close);
+      final app = await AppDependencies.initialize(
+        inventoryStore: store,
+        nfcService: nfc,
+        incomingLinkService: links,
+      );
+      final eightyCharacters = List.filled(80, '🧵').join();
+
+      final unit = await app.createMaterialUnit(eightyCharacters, ['Slot 1']);
+      expect(unit.name, eightyCharacters);
+      await expectLater(
+        app.createMaterialUnit('$eightyCharacters🧵', ['Slot 1']),
+        throwsA(isA<PlaceValidationException>()),
+      );
+      expect((await store.open()).materialUnits, hasLength(1));
+    },
+  );
+
+  test('empty, overlong, and control-character names do not persist', () async {
+    final store = FakeInventoryStore();
+    final nfc = FakeNfcService();
+    final links = FakeIncomingLinkService();
+    addTearDown(nfc.close);
+    addTearDown(links.close);
+    final app = await AppDependencies.initialize(
+      inventoryStore: store,
+      nfcService: nfc,
+      incomingLinkService: links,
+    );
+
+    for (final invalid in ['  ', 'A' * 81, 'Shelf\u0085A']) {
+      await expectLater(
+        app.createStorageSlot(invalid),
+        throwsA(isA<PlaceValidationException>()),
+      );
+    }
+    await expectLater(
+      app.createMaterialUnit('AMS', ['\u0000']),
+      throwsA(isA<PlaceValidationException>()),
+    );
+    expect((await store.open()).storageSlots, isEmpty);
+    expect((await store.open()).materialUnits, isEmpty);
+  });
+
+  test(
+    'conflicting place renames leave persisted identities and names unchanged',
+    () async {
+      final directory = await Directory.systemTemp.createTemp(
+        'places-rename-test-',
+      );
+      addTearDown(() => directory.delete(recursive: true));
+      final file = File('${directory.path}/inventory.json');
+      final nfc = FakeNfcService();
+      final links = FakeIncomingLinkService();
+      addTearDown(nfc.close);
+      addTearDown(links.close);
+      final app = await AppDependencies.initialize(
+        inventoryStore: JsonInventoryStore(file),
+        nfcService: nfc,
+        incomingLinkService: links,
+      );
+      final shelf = await app.createStorageSlot('Shelf A', area: 'Workshop');
+      final otherShelf = await app.createStorageSlot(
+        'Shelf B',
+        area: 'Basement',
+      );
+      final ams = await app.createMaterialUnit('AMS', ['Left']);
+      final holder = await app.createMaterialUnit('Holder', ['Single']);
+
+      await expectLater(
+        app.renameStorageSlot(otherShelf.id, ' shelf a ', area: ' workshop '),
+        throwsA(isA<PlaceValidationException>()),
+      );
+      await expectLater(
+        app.renameMaterialUnit(holder.id, ' ams '),
+        throwsA(isA<PlaceValidationException>()),
+      );
+
+      final reopened = await JsonInventoryStore(file).open();
+      expect(
+        reopened.storageSlots.map((slot) => (slot.id, slot.name, slot.area)),
+        [
+          (shelf.id, 'Shelf A', 'Workshop'),
+          (otherShelf.id, 'Shelf B', 'Basement'),
+        ],
+      );
+      expect(reopened.materialUnits.map((unit) => (unit.id, unit.name)), [
+        (ams.id, 'AMS'),
+        (holder.id, 'Holder'),
+      ]);
+    },
+  );
 }

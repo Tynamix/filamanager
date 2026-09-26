@@ -22,3 +22,4 @@ Storage slots and material units with named material slots can be created, brows
 ## Comments
 
 - 2026-09-26: Pixel 9 review found that separate Add storage slot and Add material unit buttons used different visual weights and stacked awkwardly on the phone. Use one Add place action, followed by an equally styled place-type choice, and record reusable action-hierarchy and compact-layout rules in `docs/agents/ui.md`.
+- 2026-09-27: [PR #7 review](https://github.com/Tynamix/filamanager/pull/7#issuecomment-5850605449) requested schema-version authority, announced validation errors, active material-slot counts, and regression coverage for migration, naming, and occupancy. The follow-up also aligns the NFC progress affordance and replaces fixed save delays in the shared smoke suite.

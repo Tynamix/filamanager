@@ -11,6 +11,51 @@ import 'package:flutter_test/flutter_test.dart';
 import '../support/app_smoke_suite.dart';
 
 void main() {
+  testWidgets('name conflict is announced and leaves saved places unchanged', (
+    tester,
+  ) async {
+    final store = FakeInventoryStore();
+    final nfc = FakeNfcService();
+    final links = FakeIncomingLinkService();
+    addTearDown(nfc.close);
+    addTearDown(links.close);
+    final app = await AppDependencies.initialize(
+      inventoryStore: store,
+      nfcService: nfc,
+      incomingLinkService: links,
+    );
+    await app.createStorageSlot('Shelf A');
+    await tester.pumpWidget(FilaManagerApp(dependencies: app));
+    await tester.tap(find.text('Places'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Add place'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Storage slot'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.bySemanticsLabel('Storage-slot name'),
+      ' shelf a ',
+    );
+    await tester.tap(find.text('Review storage slot'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, 'Create storage slot'));
+    await tester.pumpAndSettle();
+
+    const error =
+        'A storage slot with this name already exists in this storage area.';
+    expect(find.text(error), findsOneWidget);
+    expect(find.text('No inventory changes were made.'), findsOneWidget);
+    final semantics = tester.ensureSemantics();
+    expect(
+      tester.getSemantics(find.text(error)).flagsCollection.isLiveRegion,
+      isTrue,
+    );
+    semantics.dispose();
+    expect((await store.open()).storageSlots.map((slot) => slot.name), [
+      'Shelf A',
+    ]);
+  });
+
   testWidgets('compact Places uses one add action with a place-type choice', (
     tester,
   ) async {
@@ -98,10 +143,6 @@ void main() {
           tester.tap(find.widgetWithText(FilledButton, 'Create storage slot')),
     );
     await tester.pumpAndSettle();
-    await tester.runAsync(
-      () => Future<void>.delayed(const Duration(milliseconds: 50)),
-    );
-    await tester.pumpAndSettle();
     expect(find.text('Workshop'), findsOneWidget);
     expect(find.text('Active'), findsOneWidget);
     expect(find.bySemanticsLabel('Place status: Active'), findsOneWidget);
@@ -121,10 +162,6 @@ void main() {
     await tester.pumpAndSettle();
     await tester.runAsync(
       () => tester.tap(find.widgetWithText(FilledButton, 'Save storage slot')),
-    );
-    await tester.pumpAndSettle();
-    await tester.runAsync(
-      () => Future<void>.delayed(const Duration(milliseconds: 50)),
     );
     await tester.pumpAndSettle();
     expect(find.text('Shelf B'), findsOneWidget);
@@ -279,6 +316,51 @@ void main() {
     expect(find.text('Active shelf'), findsOneWidget);
     expect(find.text('Archived shelf'), findsNothing);
     expect(find.text('Archived holder'), findsNothing);
+  });
+
+  testWidgets('material-unit browse count matches visible active slots', (
+    tester,
+  ) async {
+    final store = _SeededInventoryStore(
+      InventoryDocument(
+        schemaVersion: 2,
+        materialUnits: [
+          MaterialUnit(
+            id: PlaceId.parse('AaBbCcDdEeFfGgHhIiJjKk'),
+            name: 'AMS',
+            slots: [
+              MaterialSlot(
+                id: PlaceId.parse('AbCdEfGhIjKlMnOpQrStUv'),
+                name: 'Left',
+              ),
+              MaterialSlot(
+                id: PlaceId.parse('ZyXwVuTsRqPoNmLkJiHgFe'),
+                name: 'Right',
+                archived: true,
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+    final nfc = FakeNfcService();
+    final links = FakeIncomingLinkService();
+    addTearDown(nfc.close);
+    addTearDown(links.close);
+    final app = await AppDependencies.initialize(
+      inventoryStore: store,
+      nfcService: nfc,
+      incomingLinkService: links,
+    );
+    await tester.pumpWidget(FilaManagerApp(dependencies: app));
+    await tester.tap(find.text('Places'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('1 material slot · Active'), findsOneWidget);
+    await tester.tap(find.text('AMS'));
+    await tester.pumpAndSettle();
+    expect(find.text('Left'), findsOneWidget);
+    expect(find.text('Right'), findsNothing);
   });
 }
 
