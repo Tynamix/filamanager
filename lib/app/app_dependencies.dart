@@ -5,6 +5,7 @@ import 'package:filamanager/inventory/storage_slot.dart';
 import 'package:filamanager/inventory/storage_slot_id.dart';
 import 'package:filamanager/inventory/material_unit.dart';
 import 'package:filamanager/inventory/place_id.dart';
+import 'package:filamanager/inventory/place_name.dart';
 import 'package:filamanager/persistence/inventory_store.dart';
 import 'package:filamanager/services/incoming_link_service.dart';
 import 'package:filamanager/services/nfc_service.dart';
@@ -32,8 +33,8 @@ final class AppDependencies {
     if (inventory.storageSlots.any(
       (slot) =>
           !slot.archived &&
-          _key(slot.name) == _key(displayName) &&
-          _key(slot.area ?? '') == _key(displayArea ?? ''),
+          placeNameKey(slot.name) == placeNameKey(displayName) &&
+          placeNameKey(slot.area ?? '') == placeNameKey(displayArea ?? ''),
     )) {
       throw const PlaceValidationException(
         'A storage slot with this name already exists in this storage area.',
@@ -68,8 +69,8 @@ final class AppDependencies {
           (slot) =>
               slot.id != id &&
               !slot.archived &&
-              _key(slot.name) == _key(displayName) &&
-              _key(slot.area ?? '') == _key(displayArea ?? ''),
+              placeNameKey(slot.name) == placeNameKey(displayName) &&
+              placeNameKey(slot.area ?? '') == placeNameKey(displayArea ?? ''),
         )) {
       throw const PlaceValidationException(
         'A storage slot with this name already exists in this storage area.',
@@ -96,7 +97,9 @@ final class AppDependencies {
       throw const PlaceValidationException('Add at least one material slot.');
     }
     if (inventory.materialUnits.any(
-      (unit) => !unit.archived && _key(unit.name) == _key(displayName),
+      (unit) =>
+          !unit.archived &&
+          placeNameKey(unit.name) == placeNameKey(displayName),
     )) {
       throw const PlaceValidationException(
         'A material unit with this name already exists.',
@@ -105,7 +108,7 @@ final class AppDependencies {
     final names = slotNames
         .map((slot) => _validName(slot, 'Material-slot name'))
         .toList();
-    if (names.map(_key).toSet().length != names.length) {
+    if (names.map(placeNameKey).toSet().length != names.length) {
       throw const PlaceValidationException(
         'Material-slot names must be unique within the material unit.',
       );
@@ -141,7 +144,7 @@ final class AppDependencies {
           (unit) =>
               unit.id != id &&
               !unit.archived &&
-              _key(unit.name) == _key(displayName),
+              placeNameKey(unit.name) == placeNameKey(displayName),
         )) {
       throw const PlaceValidationException(
         'A material unit with this name already exists.',
@@ -161,7 +164,7 @@ final class AppDependencies {
     ];
     final activeNames = [
       for (final slot in slots)
-        if (!slot.archived) _key(slot.name),
+        if (!slot.archived) placeNameKey(slot.name),
     ];
     if (activeNames.toSet().length != activeNames.length) {
       throw const PlaceValidationException(
@@ -176,8 +179,6 @@ final class AppDependencies {
     inventory = updatedInventory;
     return renamed;
   }
-
-  static String _key(String value) => value.trim().toLowerCase();
 
   static String _validName(String value, String label) {
     final name = value.trim();

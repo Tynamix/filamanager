@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:filamanager/app/app_dependencies.dart';
 import 'package:filamanager/app/fila_theme.dart';
 import 'package:filamanager/inventory/material_unit.dart';
+import 'package:filamanager/inventory/place_name.dart';
 import 'package:filamanager/inventory/storage_slot.dart';
 import 'package:filamanager/inventory/storage_slot_reference.dart';
 import 'package:filamanager/services/nfc_service.dart';
@@ -539,10 +540,7 @@ final class _PlacesView extends StatelessWidget {
   Widget build(BuildContext context) {
     final areas = <String, String?>{};
     for (final slot in storageSlots) {
-      areas.putIfAbsent(
-        (slot.area ?? '').trim().toLowerCase(),
-        () => slot.area,
-      );
+      areas.putIfAbsent(placeNameKey(slot.area ?? ''), () => slot.area);
     }
     return SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(18, 20, 18, 24),
@@ -592,8 +590,7 @@ final class _PlacesView extends StatelessWidget {
                   ),
                   const SizedBox(height: 8),
                   for (final storageSlot in storageSlots.where(
-                    (slot) =>
-                        (slot.area ?? '').trim().toLowerCase() == area.key,
+                    (slot) => placeNameKey(slot.area ?? '') == area.key,
                   )) ...[
                     _PrototypeCard(
                       child: Material(
