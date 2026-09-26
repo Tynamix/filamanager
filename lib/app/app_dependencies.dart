@@ -30,12 +30,7 @@ final class AppDependencies {
   Future<StorageSlot> createStorageSlot(String name, {String? area}) async {
     final displayName = _validName(name, 'Storage-slot name');
     final displayArea = _optionalArea(area);
-    if (inventory.storageSlots.any(
-      (slot) =>
-          !slot.archived &&
-          placeNameKey(slot.name) == placeNameKey(displayName) &&
-          placeNameKey(slot.area ?? '') == placeNameKey(displayArea ?? ''),
-    )) {
+    if (_hasActiveStorageName(displayName, displayArea)) {
       throw const PlaceValidationException(
         'A storage slot with this name already exists in this storage area.',
       );
@@ -65,13 +60,7 @@ final class AppDependencies {
       throw const PlaceValidationException('Storage slot no longer exists.');
     }
     if (!inventory.storageSlots[index].archived &&
-        inventory.storageSlots.any(
-          (slot) =>
-              slot.id != id &&
-              !slot.archived &&
-              placeNameKey(slot.name) == placeNameKey(displayName) &&
-              placeNameKey(slot.area ?? '') == placeNameKey(displayArea ?? ''),
-        )) {
+        _hasActiveStorageName(displayName, displayArea, except: id)) {
       throw const PlaceValidationException(
         'A storage slot with this name already exists in this storage area.',
       );
@@ -96,11 +85,7 @@ final class AppDependencies {
     if (slotNames.isEmpty) {
       throw const PlaceValidationException('Add at least one material slot.');
     }
-    if (inventory.materialUnits.any(
-      (unit) =>
-          !unit.archived &&
-          placeNameKey(unit.name) == placeNameKey(displayName),
-    )) {
+    if (_hasActiveMaterialUnitName(displayName)) {
       throw const PlaceValidationException(
         'A material unit with this name already exists.',
       );
@@ -140,12 +125,7 @@ final class AppDependencies {
       throw const PlaceValidationException('Material unit no longer exists.');
     }
     if (!inventory.materialUnits[index].archived &&
-        inventory.materialUnits.any(
-          (unit) =>
-              unit.id != id &&
-              !unit.archived &&
-              placeNameKey(unit.name) == placeNameKey(displayName),
-        )) {
+        _hasActiveMaterialUnitName(displayName, except: id)) {
       throw const PlaceValidationException(
         'A material unit with this name already exists.',
       );
@@ -178,6 +158,32 @@ final class AppDependencies {
     await inventoryStore.save(updatedInventory);
     inventory = updatedInventory;
     return renamed;
+  }
+
+  bool _hasActiveStorageName(
+    String name,
+    String? area, {
+    StorageSlotId? except,
+  }) {
+    final nameKey = placeNameKey(name);
+    final areaKey = placeNameKey(area ?? '');
+    return inventory.storageSlots.any(
+      (slot) =>
+          !slot.archived &&
+          slot.id != except &&
+          placeNameKey(slot.name) == nameKey &&
+          placeNameKey(slot.area ?? '') == areaKey,
+    );
+  }
+
+  bool _hasActiveMaterialUnitName(String name, {PlaceId? except}) {
+    final nameKey = placeNameKey(name);
+    return inventory.materialUnits.any(
+      (unit) =>
+          !unit.archived &&
+          unit.id != except &&
+          placeNameKey(unit.name) == nameKey,
+    );
   }
 
   static String _validName(String value, String label) {
