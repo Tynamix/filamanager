@@ -70,10 +70,10 @@ model.
   the review or confirmation action visible below the scrolling fields. When
   the keyboard leaves too little height, let the complete sheet scroll instead
   of allowing headers or actions to overflow the viewport.
-- On opening a guided sheet, focus its heading first so the keyboard does not
-  hide the form before the hobbyist has seen it. Move focus to the review
-  heading on review, then return it to the originating control when the sheet
-  closes.
+- On opening a guided data-entry or choice sheet, focus its heading first so
+  the keyboard does not hide the form before the hobbyist has seen it. Move
+  focus to the review heading on review, then return it to the originating
+  control or new details heading when the sheet closes.
 
 ## Production boundaries
 

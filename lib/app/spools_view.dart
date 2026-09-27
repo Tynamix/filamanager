@@ -547,7 +547,9 @@ final class _RegisterSpoolSheetState extends State<RegisterSpoolSheet> {
             const FilaEyebrow('Required details'),
             const SizedBox(height: 6),
             Text(
-              'Material, one representative color, and remaining grams are needed.',
+              widget.editingSpool == null
+                  ? 'Material, one representative color, and remaining grams are needed.'
+                  : 'Material and one representative color are required. Remaining quantity stays unchanged.',
               style: Theme.of(context).textTheme.bodyMedium,
             ),
             const SizedBox(height: 16),

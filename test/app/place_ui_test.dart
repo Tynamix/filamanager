@@ -1,3 +1,5 @@
+import 'dart:ui' show Tristate;
+
 import 'package:filamanager/app/app.dart';
 import 'package:filamanager/app/app_dependencies.dart';
 import 'package:filamanager/infrastructure/persistence/json_inventory_store.dart';
@@ -12,6 +14,175 @@ import 'package:flutter_test/flutter_test.dart';
 import '../support/app_smoke_suite.dart';
 
 void main() {
+  testWidgets('storage-slot guidance and focus follow the guided sheet', (
+    tester,
+  ) async {
+    final nfc = FakeNfcService();
+    final links = FakeIncomingLinkService();
+    addTearDown(nfc.close);
+    addTearDown(links.close);
+    final app = await AppDependencies.initialize(
+      inventoryStore: FakeInventoryStore(),
+      nfcService: nfc,
+      incomingLinkService: links,
+    );
+    await tester.pumpWidget(FilaManagerApp(dependencies: app));
+    final semantics = tester.ensureSemantics();
+    await tester.tap(find.text('Places'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Add place'));
+    await tester.pumpAndSettle();
+    expect(
+      tester
+          .getSemantics(find.text('Choose place type'))
+          .flagsCollection
+          .isFocused,
+      Tristate.isTrue,
+    );
+
+    await tester.tap(find.text('Storage slot'));
+    await tester.pumpAndSettle();
+    expect(find.text('Name this storage position.'), findsOneWidget);
+    expect(find.text('Add a storage-area label if useful.'), findsOneWidget);
+    expect(
+      tester
+          .getSemantics(find.text('Create storage slot'))
+          .flagsCollection
+          .isFocused,
+      Tristate.isTrue,
+    );
+    await tester.enterText(
+      find.bySemanticsLabel('Storage-slot name'),
+      'Shelf A',
+    );
+    final review = find.text('Review storage slot');
+    await Scrollable.ensureVisible(tester.element(review), alignment: .6);
+    await tester.pumpAndSettle();
+    await tester.tap(review);
+    await tester.pumpAndSettle();
+    expect(
+      tester
+          .getSemantics(find.text('Create this storage slot?'))
+          .flagsCollection
+          .isFocused,
+      Tristate.isTrue,
+    );
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+    expect(
+      tester.getSemantics(find.text('Add place')).flagsCollection.isFocused,
+      Tristate.isTrue,
+    );
+    semantics.dispose();
+  });
+
+  testWidgets('material-unit guidance and focus follow the guided sheet', (
+    tester,
+  ) async {
+    final nfc = FakeNfcService();
+    final links = FakeIncomingLinkService();
+    addTearDown(nfc.close);
+    addTearDown(links.close);
+    final app = await AppDependencies.initialize(
+      inventoryStore: FakeInventoryStore(),
+      nfcService: nfc,
+      incomingLinkService: links,
+    );
+    await tester.pumpWidget(FilaManagerApp(dependencies: app));
+    final semantics = tester.ensureSemantics();
+    await tester.tap(find.text('Places'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Add place'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Material unit'));
+    await tester.pumpAndSettle();
+    expect(
+      find.text('Name the holder and every material slot.'),
+      findsOneWidget,
+    );
+    expect(
+      tester
+          .getSemantics(find.text('Create material unit'))
+          .flagsCollection
+          .isFocused,
+      Tristate.isTrue,
+    );
+    await tester.enterText(find.bySemanticsLabel('Material-unit name'), 'AMS');
+    await tester.enterText(
+      find.bySemanticsLabel('Material-slot name 1'),
+      'Left',
+    );
+    final review = find.text('Review material unit');
+    await Scrollable.ensureVisible(tester.element(review), alignment: .6);
+    await tester.pumpAndSettle();
+    await tester.tap(review);
+    await tester.pumpAndSettle();
+    expect(
+      tester
+          .getSemantics(find.text('Create this material unit?'))
+          .flagsCollection
+          .isFocused,
+      Tristate.isTrue,
+    );
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+    expect(
+      tester.getSemantics(find.text('Add place')).flagsCollection.isFocused,
+      Tristate.isTrue,
+    );
+    semantics.dispose();
+  });
+
+  testWidgets('place sheet completion focuses details and edit cancellation', (
+    tester,
+  ) async {
+    final nfc = FakeNfcService();
+    final links = FakeIncomingLinkService();
+    addTearDown(nfc.close);
+    addTearDown(links.close);
+    final app = await AppDependencies.initialize(
+      inventoryStore: FakeInventoryStore(),
+      nfcService: nfc,
+      incomingLinkService: links,
+    );
+    await tester.pumpWidget(FilaManagerApp(dependencies: app));
+    final semantics = tester.ensureSemantics();
+    await tester.tap(find.text('Places'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Add place'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Storage slot'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.bySemanticsLabel('Storage-slot name'),
+      'Shelf A',
+    );
+    final review = find.text('Review storage slot');
+    await Scrollable.ensureVisible(tester.element(review), alignment: .6);
+    await tester.pumpAndSettle();
+    await tester.tap(review);
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, 'Create storage slot'));
+    await tester.pumpAndSettle();
+    expect(
+      tester.getSemantics(find.text('Shelf A')).flagsCollection.isFocused,
+      Tristate.isTrue,
+    );
+
+    await tester.tap(find.text('Edit storage slot'));
+    await tester.pumpAndSettle();
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+    expect(
+      tester
+          .getSemantics(find.text('Edit storage slot'))
+          .flagsCollection
+          .isFocused,
+      Tristate.isTrue,
+    );
+    semantics.dispose();
+  });
+
   testWidgets('place fields share the required and active-value hierarchy', (
     tester,
   ) async {

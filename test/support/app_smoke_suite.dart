@@ -1101,6 +1101,12 @@ void appSmokeSuite() {
 
     await tester.tap(find.text('Edit details'));
     await _pumpInteraction(tester);
+    expect(
+      find.text(
+        'Material and one representative color are required. Remaining quantity stays unchanged.',
+      ),
+      findsOneWidget,
+    );
     await tester.enterText(find.bySemanticsLabel('Material type'), 'PETG');
     await tester.enterText(
       find.bySemanticsLabel('Filament color (#RRGGBB)'),
