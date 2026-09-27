@@ -4,7 +4,7 @@
 
 Maintain one current, unversioned local inventory format. Its JSON document contains `storageSlots`, `materialUnits`, and `filamentSpools` collections. Format changes update this current shape, its app-level persistence tests, and the product specification. Pre-release snapshots have no compatibility migration contract.
 
-Validate every required collection and record on open. Preserve unreadable or incompatible files byte-for-byte, block inventory mutations, and show the existing retry and diagnostic recovery state. Keep atomic file replacement for saves. Never silently reset an inventory or fill in a missing collection.
+Validate every required collection and record on open, including required record fields. Treat unknown fields at any level as incompatible so a later save cannot discard their data. Preserve unreadable or incompatible files byte-for-byte, block inventory mutations, and show the existing retry and diagnostic recovery state. Keep atomic file replacement for saves. Never silently reset an inventory or fill in a missing collection.
 
 A complete file from the earlier pre-release version-3 implementation can be read because it has the current three collections. Its obsolete `schemaVersion` property has no authority and is omitted from the next save.
 

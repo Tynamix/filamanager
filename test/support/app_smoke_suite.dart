@@ -195,6 +195,126 @@ void appSmokeSuite() {
     expect(await tester.runAsync(file.readAsString), incomplete);
   });
 
+  testWidgets('preserves an inventory with unknown collection data', (
+    tester,
+  ) async {
+    final file = File('${temporaryDirectory.path}/inventory.json');
+    const incompatible =
+        '{"storageSlots":[],"materialUnits":[],"filamentSpools":[],"futureRecords":[{"id":"keep-me"}]}';
+    await tester.runAsync(() => file.writeAsString(incompatible));
+
+    final startupFailure = await tester.runAsync<Object?>(() async {
+      try {
+        await AppDependencies.initialize(
+          inventoryStore: inventoryStoreFactory(),
+          nfcService: nfcService,
+          incomingLinkService: incomingLinkService,
+        );
+        return null;
+      } catch (error) {
+        return error;
+      }
+    });
+
+    expect(startupFailure, isA<FormatException>());
+    expect(await tester.runAsync(file.readAsString), incompatible);
+  });
+
+  testWidgets('preserves an inventory with unknown record data', (
+    tester,
+  ) async {
+    final file = File('${temporaryDirectory.path}/inventory.json');
+    final incompatible = jsonEncode({
+      'storageSlots': [
+        {
+          'id': _storageSlotId,
+          'name': 'Shelf A',
+          'archived': false,
+          'futurePlacement': 'keep-me',
+        },
+      ],
+      'materialUnits': <Object>[],
+      'filamentSpools': <Object>[],
+    });
+    await tester.runAsync(() => file.writeAsString(incompatible));
+
+    final startupFailure = await tester.runAsync<Object?>(() async {
+      try {
+        await AppDependencies.initialize(
+          inventoryStore: inventoryStoreFactory(),
+          nfcService: nfcService,
+          incomingLinkService: incomingLinkService,
+        );
+        return null;
+      } catch (error) {
+        return error;
+      }
+    });
+
+    expect(startupFailure, isA<FormatException>());
+    expect(await tester.runAsync(file.readAsString), incompatible);
+  });
+
+  testWidgets('preserves incomplete place records', (tester) async {
+    final file = File('${temporaryDirectory.path}/inventory.json');
+    for (final incomplete in [
+      jsonEncode({
+        'storageSlots': [
+          {'id': _storageSlotId, 'name': 'Shelf A'},
+        ],
+        'materialUnits': <Object>[],
+        'filamentSpools': <Object>[],
+      }),
+      jsonEncode({
+        'storageSlots': <Object>[],
+        'materialUnits': [
+          {
+            'id': _storageSlotId,
+            'name': 'AMS',
+            'slots': [
+              {
+                'id': 'AaBbCcDdEeFfGgHhIiJjKk',
+                'name': 'Left',
+                'archived': false,
+              },
+            ],
+          },
+        ],
+        'filamentSpools': <Object>[],
+      }),
+      jsonEncode({
+        'storageSlots': <Object>[],
+        'materialUnits': [
+          {
+            'id': _storageSlotId,
+            'name': 'AMS',
+            'archived': false,
+            'slots': [
+              {'id': 'AaBbCcDdEeFfGgHhIiJjKk', 'name': 'Left'},
+            ],
+          },
+        ],
+        'filamentSpools': <Object>[],
+      }),
+    ]) {
+      await tester.runAsync(() => file.writeAsString(incomplete));
+      final startupFailure = await tester.runAsync<Object?>(() async {
+        try {
+          await AppDependencies.initialize(
+            inventoryStore: inventoryStoreFactory(),
+            nfcService: nfcService,
+            incomingLinkService: incomingLinkService,
+          );
+          return null;
+        } catch (error) {
+          return error;
+        }
+      });
+      expect(startupFailure, isA<FormatException>());
+      expect(await tester.runAsync(file.readAsString), incomplete);
+    }
+  });
+
   testWidgets('shows recovery and retries after an unreadable local store', (
     tester,
   ) async {
@@ -826,6 +946,10 @@ void appSmokeSuite() {
       await tester.enterText(
         find.bySemanticsLabel('Remaining quantity (g)'),
         '750',
+      );
+      expect(
+        find.widgetWithText(OutlinedButton, 'Review filament spool'),
+        findsOneWidget,
       );
       await tester.tap(find.text('Review filament spool'));
       await _pumpInteraction(tester);

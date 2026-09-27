@@ -27,7 +27,6 @@ final class JsonInventoryStore implements InventoryStore {
         'Inventory store must contain a JSON object.',
       );
     }
-
     final storageSlotsJson = decoded['storageSlots'];
     if (storageSlotsJson is! List) {
       throw const FormatException('Inventory storage slots must be a list.');
@@ -69,6 +68,11 @@ final class JsonInventoryStore implements InventoryStore {
       ],
       filamentSpools: filamentSpools,
     );
+    _rejectUnknownFields(decoded, {
+      ..._encodeInventory(inventory),
+      if (decoded.containsKey('schemaVersion'))
+        'schemaVersion': decoded['schemaVersion'],
+    });
     return inventory;
   }
 
@@ -76,19 +80,36 @@ final class JsonInventoryStore implements InventoryStore {
   Future<void> save(InventoryDocument inventory) async {
     await file.parent.create(recursive: true);
     final temporaryFile = File('${file.path}.tmp');
-    final contents = jsonEncode(<String, Object>{
-      'storageSlots': [
-        for (final storageSlot in inventory.storageSlots) storageSlot.toJson(),
-      ],
-      'materialUnits': [
-        for (final unit in inventory.materialUnits) unit.toJson(),
-      ],
-      'filamentSpools': [
-        for (final spool in inventory.filamentSpools) spool.toJson(),
-      ],
-    });
+    final contents = jsonEncode(_encodeInventory(inventory));
     await temporaryFile.writeAsString(contents, flush: true);
     await temporaryFile.rename(file.path);
+  }
+
+  Map<String, Object> _encodeInventory(InventoryDocument inventory) => {
+    'storageSlots': [
+      for (final storageSlot in inventory.storageSlots) storageSlot.toJson(),
+    ],
+    'materialUnits': [
+      for (final unit in inventory.materialUnits) unit.toJson(),
+    ],
+    'filamentSpools': [
+      for (final spool in inventory.filamentSpools) spool.toJson(),
+    ],
+  };
+
+  void _rejectUnknownFields(Object? stored, Object? recognized) {
+    if (stored is Map && recognized is Map) {
+      for (final key in stored.keys) {
+        if (!recognized.containsKey(key)) {
+          throw const FormatException('Inventory store has unknown fields.');
+        }
+        _rejectUnknownFields(stored[key], recognized[key]);
+      }
+    } else if (stored is List && recognized is List) {
+      for (var index = 0; index < stored.length; index++) {
+        _rejectUnknownFields(stored[index], recognized[index]);
+      }
+    }
   }
 
   Future<void> _createEmptyStore() async {

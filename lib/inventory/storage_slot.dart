@@ -38,7 +38,7 @@ final class StorageSlot {
     final id = json['id'];
     final name = json['name'];
     final area = json['area'];
-    final archived = json['archived'] ?? false;
+    final archived = json['archived'];
     final occupantId = json['occupantId'];
     if (id is! String ||
         name is! String ||

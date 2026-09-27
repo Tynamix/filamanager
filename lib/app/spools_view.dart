@@ -463,7 +463,7 @@ final class _RegisterSpoolSheetState extends State<RegisterSpoolSheet> {
       ],
       const SizedBox(height: 12),
       if (review == null)
-        FilledButton(
+        OutlinedButton(
           onPressed: _showReview,
           child: Text(editing ? 'Review changes' : 'Review filament spool'),
         )
