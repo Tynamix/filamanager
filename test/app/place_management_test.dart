@@ -72,7 +72,6 @@ void main() {
       final id = StorageSlotId.parse('AbCdEfGhIjKlMnOpQrStUv');
       await store.save(
         InventoryDocument(
-          schemaVersion: JsonInventoryStore.currentSchemaVersion,
           storageSlots: [
             StorageSlot(
               id: id,
@@ -218,7 +217,6 @@ void main() {
     final store = JsonInventoryStore(file);
     await store.save(
       InventoryDocument(
-        schemaVersion: JsonInventoryStore.currentSchemaVersion,
         storageSlots: [
           StorageSlot(
             id: archivedId,

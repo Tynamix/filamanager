@@ -78,11 +78,12 @@ storage-area labels disappear naturally because they are values, not records.
 
 ### Versioning and failure behavior
 
-The local representation carries a schema version and supports forward app
-updates through atomic migrations. A failed migration or unreadable local
-store must preserve the previous data, block further inventory mutations, and
-present a clear retry or diagnostic state. The app never silently clears or
-recreates the inventory. A destructive reset requires explicit confirmation.
+The local representation remains unversioned before the first Play build.
+An incompatible or unreadable local store must preserve the previous data,
+block further inventory mutations, and present a clear retry or diagnostic
+state. The app never silently clears or recreates the inventory. A destructive
+reset requires explicit confirmation. The first Play release establishes the
+published format and upgrade policy for subsequent builds.
 
 This contract does not choose a database, object store, or file format.
 
@@ -92,3 +93,7 @@ User-visible export, import, backup restoration, device transfer, merging, and
 imports into non-empty inventories are not part of the MVP. They can follow the
 four-week personal validation; their format and conflict semantics are
 therefore deliberately undecided rather than constrained prematurely.
+
+## Comments
+
+- 2026-09-27: Ticket 29 replaces the earlier pre-release schema-version decision with one current unversioned inventory format. The versioning and failure section above now reflects that decision.

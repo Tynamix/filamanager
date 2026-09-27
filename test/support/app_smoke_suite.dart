@@ -147,14 +147,12 @@ void appSmokeSuite() {
     expect(find.text('Scan a storage-slot tag'), findsOneWidget);
   });
 
-  testWidgets('refuses a schema-3 store missing inventory collections', (
-    tester,
-  ) async {
+  testWidgets('refuses a store missing inventory collections', (tester) async {
     final file = File('${temporaryDirectory.path}/inventory.json');
     for (final unreadable in [
-      '{"schemaVersion":3,"storageSlots":[],"materialUnits":[]}',
-      '{"schemaVersion":3,"materialUnits":[],"filamentSpools":[]}',
-      '{"schemaVersion":3,"storageSlots":[],"filamentSpools":[]}',
+      '{"storageSlots":[],"materialUnits":[]}',
+      '{"materialUnits":[],"filamentSpools":[]}',
+      '{"storageSlots":[],"filamentSpools":[]}',
     ]) {
       await tester.runAsync(() => file.writeAsString(unreadable));
       final startupFailure = await tester.runAsync<Object?>(() async {
@@ -174,12 +172,34 @@ void appSmokeSuite() {
     }
   });
 
+  testWidgets('preserves an incomplete pre-release inventory', (tester) async {
+    final file = File('${temporaryDirectory.path}/inventory.json');
+    const incomplete =
+        '{"schemaVersion":2,"storageSlots":[],"materialUnits":[]}';
+    await tester.runAsync(() => file.writeAsString(incomplete));
+
+    final startupFailure = await tester.runAsync<Object?>(() async {
+      try {
+        await AppDependencies.initialize(
+          inventoryStore: inventoryStoreFactory(),
+          nfcService: nfcService,
+          incomingLinkService: incomingLinkService,
+        );
+        return null;
+      } catch (error) {
+        return error;
+      }
+    });
+
+    expect(startupFailure, isA<FormatException>());
+    expect(await tester.runAsync(file.readAsString), incomplete);
+  });
+
   testWidgets('shows recovery and retries after an unreadable local store', (
     tester,
   ) async {
     final file = File('${temporaryDirectory.path}/inventory.json');
-    const unreadable =
-        '{"schemaVersion":3,"storageSlots":[],"materialUnits":[]}';
+    const unreadable = '{"storageSlots":[],"materialUnits":[]}';
     await tester.runAsync(() => file.writeAsString(unreadable));
     await tester.pumpWidget(
       FilaManagerBootstrap(
@@ -213,7 +233,7 @@ void appSmokeSuite() {
 
     await tester.runAsync(
       () => file.writeAsString(
-        '{"schemaVersion":3,"storageSlots":[],"materialUnits":[],"filamentSpools":[]}',
+        '{"storageSlots":[],"materialUnits":[],"filamentSpools":[]}',
       ),
     );
     await tester.tap(find.text('Retry opening inventory'));
@@ -229,15 +249,16 @@ void appSmokeSuite() {
     expect(find.text('Scan a storage-slot tag'), findsOneWidget);
   });
 
-  testWidgets('opens a legacy schema-2 spool inventory after rebasing places', (
+  testWidgets('opens an existing complete versioned spool inventory', (
     tester,
   ) async {
     final file = File('${temporaryDirectory.path}/inventory.json');
     await tester.runAsync(
       () => file.writeAsString(
         jsonEncode({
-          'schemaVersion': 2,
+          'schemaVersion': 3,
           'storageSlots': <Object>[],
+          'materialUnits': <Object>[],
           'filamentSpools': [
             {
               'id': _storageSlotId,
@@ -289,22 +310,20 @@ void appSmokeSuite() {
     await tester.tap(find.text('Spools'));
     await _pumpInteraction(tester);
     expect(find.widgetWithText(ListTile, 'PETG'), findsOneWidget);
-    final migrated = jsonDecode(
+    final stored = jsonDecode(
       (await tester.runAsync(file.readAsString))!,
     ) as Map<String, dynamic>;
-    expect(migrated['schemaVersion'], JsonInventoryStore.currentSchemaVersion);
-    expect(migrated['materialUnits'], isEmpty);
-    expect(migrated['filamentSpools'], hasLength(1));
+    expect(stored['materialUnits'], isEmpty);
+    expect(stored['filamentSpools'], hasLength(1));
   });
 
-  testWidgets('opens a legacy schema-2 places inventory after adding spools', (
+  testWidgets('opens an unversioned places inventory with all collections', (
     tester,
   ) async {
     final file = File('${temporaryDirectory.path}/inventory.json');
     await tester.runAsync(
       () => file.writeAsString(
         jsonEncode({
-          'schemaVersion': 2,
           'storageSlots': [
             {'id': _storageSlotId, 'name': 'Shelf A', 'archived': false},
           ],
@@ -322,6 +341,7 @@ void appSmokeSuite() {
               ],
             },
           ],
+          'filamentSpools': <Object>[],
         }),
       ),
     );
@@ -349,12 +369,12 @@ void appSmokeSuite() {
     await _pumpInteraction(tester);
     expect(find.text('Shelf A'), findsOneWidget);
     expect(find.text('AMS'), findsOneWidget);
-    final migrated = jsonDecode(
+    final stored = jsonDecode(
       (await tester.runAsync(file.readAsString))!,
     ) as Map<String, dynamic>;
-    expect(migrated['schemaVersion'], JsonInventoryStore.currentSchemaVersion);
-    expect(migrated['filamentSpools'], isEmpty);
-    expect(migrated['materialUnits'], hasLength(1));
+    expect(stored.containsKey('schemaVersion'), isFalse);
+    expect(stored['filamentSpools'], isEmpty);
+    expect(stored['materialUnits'], hasLength(1));
   });
 
   testWidgets('refuses persisted Unlocated spools with broken invariants', (
@@ -368,7 +388,6 @@ void appSmokeSuite() {
           (500, null, true),
         ]) {
       final unreadable = jsonEncode({
-        'schemaVersion': 3,
         'storageSlots': <Object>[],
         'materialUnits': <Object>[],
         'filamentSpools': [
@@ -443,7 +462,6 @@ void appSmokeSuite() {
       ],
     };
     final unreadable = jsonEncode({
-      'schemaVersion': 3,
       'storageSlots': <Object>[],
       'materialUnits': <Object>[],
       'filamentSpools': [spool, spool],
@@ -829,6 +847,17 @@ void appSmokeSuite() {
       expect(find.text('not registered'), findsOneWidget);
       expect(find.text('AFTER'), findsOneWidget);
       expect(find.text('Unlocated · 750 g · no assignment'), findsOneWidget);
+
+      final savedInventory = jsonDecode(
+        (await tester.runAsync(
+          File('${temporaryDirectory.path}/inventory.json').readAsString,
+        ))!,
+      ) as Map<String, dynamic>;
+      expect(
+        savedInventory.keys,
+        containsAll(['storageSlots', 'materialUnits', 'filamentSpools']),
+      );
+      expect(savedInventory.containsKey('schemaVersion'), isFalse);
 
       await tester.tap(find.text('Home'));
       await _pumpInteraction(tester);
@@ -1636,9 +1665,7 @@ Future<void> _launchApp(
 }
 
 final class FakeInventoryStore implements InventoryStore {
-  InventoryDocument _inventory = const InventoryDocument(
-    schemaVersion: JsonInventoryStore.currentSchemaVersion,
-  );
+  InventoryDocument _inventory = const InventoryDocument();
 
   @override
   Future<InventoryDocument> open() async => _inventory;

@@ -2,7 +2,6 @@ import 'dart:ui' show Tristate;
 
 import 'package:filamanager/app/app.dart';
 import 'package:filamanager/app/app_dependencies.dart';
-import 'package:filamanager/infrastructure/persistence/json_inventory_store.dart';
 import 'package:filamanager/inventory/storage_slot.dart';
 import 'package:filamanager/inventory/storage_slot_id.dart';
 import 'package:filamanager/inventory/material_unit.dart';
@@ -451,7 +450,6 @@ void main() {
   ) async {
     final store = _SeededInventoryStore(
       InventoryDocument(
-        schemaVersion: JsonInventoryStore.currentSchemaVersion,
         storageSlots: [
           StorageSlot(
             id: StorageSlotId.parse('AbCdEfGhIjKlMnOpQrStUv'),
@@ -488,7 +486,6 @@ void main() {
   testWidgets('active Places browsing hides archived places', (tester) async {
     final store = _SeededInventoryStore(
       InventoryDocument(
-        schemaVersion: JsonInventoryStore.currentSchemaVersion,
         storageSlots: [
           StorageSlot(
             id: StorageSlotId.parse('AbCdEfGhIjKlMnOpQrStUv'),
@@ -538,7 +535,6 @@ void main() {
   ) async {
     final store = _SeededInventoryStore(
       InventoryDocument(
-        schemaVersion: JsonInventoryStore.currentSchemaVersion,
         materialUnits: [
           MaterialUnit(
             id: PlaceId.parse('AaBbCcDdEeFfGgHhIiJjKk'),

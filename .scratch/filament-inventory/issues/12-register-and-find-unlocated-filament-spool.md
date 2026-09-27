@@ -19,3 +19,4 @@
 
 - 2026-09-27: Pixel 9 emulator feedback found that a separate color-picker row disconnected the action from its field, presets alone did not support arbitrary colors, muted entered values resembled disabled inputs, and required versus optional fields were hard to distinguish. The shared form-field and color-selection rules are recorded in `docs/agents/ui.md` for future guided forms.
 - 2026-09-27: Rebasing onto the completed Places work exposed two historical schema-v2 shapes: Places data without `filamentSpools` and spool data without `materialUnits`. Schema v3 accepts and migrates either v2 shape while requiring all three collections in new v3 documents; migration coverage preserves both records and registration history.
+- 2026-09-27: Ticket 29 supersedes the pre-release schema-version and migration behavior above. The current format is unversioned and requires all three collections; incompatible prior files remain untouched for recovery.

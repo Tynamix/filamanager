@@ -10,7 +10,7 @@
 - [ ] Tests verify the state and assignment cardinality of every filament-spool state, at-most-one occupancy, active quantity rules, visible-name uniqueness, and the absence of archived occupants.
 - [ ] Multi-record operations and their history commit atomically; injected interruption before commit leaves no partial occupancy, quantity, state, or history.
 - [ ] Drafts, scans, link deliveries, review screens, cancellation, invalid input, NFC failures, and forced UI disposal before confirmation are verified to leave inventory unchanged.
-- [ ] Representative prior schema versions migrate atomically while retaining stable identities, current state, occupancy, descriptive data, and history.
-- [ ] A failed migration or unreadable store preserves the prior bytes, blocks inventory mutations, does not create an empty inventory, and presents retry and useful diagnostic recovery.
+- [ ] The current unversioned store retains stable identities, current state, occupancy, descriptive data, and history across restart. A complete older pre-release file with the same collections can still be opened.
+- [ ] An incompatible or unreadable store preserves the prior bytes, blocks inventory mutations, does not create an empty inventory, and presents retry and useful diagnostic recovery.
 - [ ] A destructive local reset is separate from retry and diagnostics, requires explicit confirmation, and never occurs automatically.
 - [ ] The full deterministic app-level suite passes without depending on widget structure, state-management calls, database layout, NFC-package internals, or network access.

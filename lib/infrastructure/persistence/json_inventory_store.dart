@@ -9,8 +9,6 @@ import 'package:filamanager/persistence/inventory_store.dart';
 final class JsonInventoryStore implements InventoryStore {
   JsonInventoryStore(this.file);
 
-  static const currentSchemaVersion = 3;
-
   final File file;
   Future<InventoryDocument>? _opening;
 
@@ -30,37 +28,16 @@ final class JsonInventoryStore implements InventoryStore {
       );
     }
 
-    final schemaVersion = decoded['schemaVersion'];
-    if (schemaVersion is! int ||
-        (schemaVersion != 1 &&
-            schemaVersion != 2 &&
-            schemaVersion != currentSchemaVersion)) {
-      throw FormatException('Unsupported inventory schema: $schemaVersion');
-    }
-
     final storageSlotsJson = decoded['storageSlots'];
     if (storageSlotsJson is! List) {
       throw const FormatException('Inventory storage slots must be a list.');
     }
-    final hasMaterialUnits = decoded.containsKey('materialUnits');
-    final hasFilamentSpools = decoded.containsKey('filamentSpools');
-    // Two independent increments used v2: one added places, the other spools.
-    // Accept either historical shape, but never invent both missing collections.
-    if (schemaVersion == 2 && !hasMaterialUnits && !hasFilamentSpools) {
-      throw const FormatException('Incomplete inventory schema 2.');
-    }
-    final materialUnitsJson =
-        schemaVersion == 1 || (schemaVersion == 2 && !hasMaterialUnits)
-        ? const <Object>[]
-        : decoded['materialUnits'];
+    final materialUnitsJson = decoded['materialUnits'];
     if (materialUnitsJson is! List) {
       throw const FormatException('Inventory material units must be a list.');
     }
 
-    final filamentSpoolsJson =
-        schemaVersion == 1 || (schemaVersion == 2 && !hasFilamentSpools)
-        ? const <Object>[]
-        : decoded['filamentSpools'];
+    final filamentSpoolsJson = decoded['filamentSpools'];
     if (filamentSpoolsJson is! List) {
       throw const FormatException('Inventory filament spools must be a list.');
     }
@@ -76,7 +53,6 @@ final class JsonInventoryStore implements InventoryStore {
       throw const FormatException('Duplicate filament-spool identity.');
     }
     final inventory = InventoryDocument(
-      schemaVersion: currentSchemaVersion,
       storageSlots: [
         for (final storageSlotJson in storageSlotsJson)
           if (storageSlotJson is Map<String, dynamic>)
@@ -93,9 +69,6 @@ final class JsonInventoryStore implements InventoryStore {
       ],
       filamentSpools: filamentSpools,
     );
-    if (schemaVersion != currentSchemaVersion) {
-      await save(inventory);
-    }
     return inventory;
   }
 
@@ -104,7 +77,6 @@ final class JsonInventoryStore implements InventoryStore {
     await file.parent.create(recursive: true);
     final temporaryFile = File('${file.path}.tmp');
     final contents = jsonEncode(<String, Object>{
-      'schemaVersion': currentSchemaVersion,
       'storageSlots': [
         for (final storageSlot in inventory.storageSlots) storageSlot.toJson(),
       ],
@@ -120,6 +92,6 @@ final class JsonInventoryStore implements InventoryStore {
   }
 
   Future<void> _createEmptyStore() async {
-    await save(const InventoryDocument(schemaVersion: currentSchemaVersion));
+    await save(const InventoryDocument());
   }
 }
