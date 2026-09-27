@@ -33,7 +33,7 @@ final class MaterialSlot {
   static MaterialSlot fromJson(Map<String, dynamic> json) {
     final id = json['id'];
     final name = json['name'];
-    final archived = json['archived'] ?? false;
+    final archived = json['archived'];
     final occupantId = json['occupantId'];
     if (id is! String ||
         name is! String ||
@@ -79,7 +79,7 @@ final class MaterialUnit {
   static MaterialUnit fromJson(Map<String, dynamic> json) {
     final id = json['id'];
     final name = json['name'];
-    final archived = json['archived'] ?? false;
+    final archived = json['archived'];
     final slots = json['slots'];
     if (id is! String ||
         name is! String ||

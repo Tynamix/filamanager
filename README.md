@@ -58,7 +58,7 @@ flutter build apk --debug
 flutter run -d DEVICE_ID
 ```
 
-The integration harness uses the real versioned JSON inventory store in a
+The integration harness uses the real JSON inventory store in a
 temporary directory and deterministic application-owned NFC and incoming-link
 adapters. This keeps the rendered application behavior identical while making
 external events repeatable.

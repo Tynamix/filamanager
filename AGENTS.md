@@ -12,6 +12,10 @@ Issues are tracked as local Markdown files under `.scratch/`. See `docs/agents/i
 
 This repository uses the single-context domain documentation layout. See `docs/agents/domain.md`.
 
+### Local inventory persistence
+
+Before changing the local inventory format or preparing the first Google Play build, read `docs/agents/persistence.md`.
+
 ### UI reference
 
 Before changing production UI, read `docs/agents/ui.md`. The selected Scan home prototype is the normative visual and interaction reference.

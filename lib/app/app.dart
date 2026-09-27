@@ -2,8 +2,11 @@ import 'dart:async';
 
 import 'package:filamanager/app/app_dependencies.dart';
 import 'package:filamanager/app/fila_theme.dart';
+import 'package:filamanager/app/fila_components.dart';
 import 'package:filamanager/inventory/material_unit.dart';
 import 'package:filamanager/inventory/place_name.dart';
+import 'package:filamanager/app/spools_view.dart';
+import 'package:filamanager/inventory/filament_spool.dart';
 import 'package:filamanager/inventory/storage_slot.dart';
 import 'package:filamanager/inventory/storage_slot_reference.dart';
 import 'package:filamanager/services/nfc_service.dart';
@@ -38,6 +41,15 @@ final class _InventoryShellState extends State<_InventoryShell> {
   var _selectedIndex = 0;
   StorageSlot? _selectedStorageSlot;
   MaterialUnit? _selectedMaterialUnit;
+  FilamentSpool? _selectedFilamentSpool;
+  final _addSpoolFocus = FocusNode(debugLabel: 'add filament spool');
+  final _addPlaceFocus = FocusNode(debugLabel: 'add place');
+  final _storageDetailFocus = FocusNode(debugLabel: 'storage-slot details');
+  final _materialDetailFocus = FocusNode(debugLabel: 'material-unit details');
+  final _editStorageFocus = FocusNode(debugLabel: 'edit storage slot');
+  final _editMaterialFocus = FocusNode(debugLabel: 'edit material unit');
+  final _spoolDetailsFocus = FocusNode(debugLabel: 'filament spool details');
+  final _editSpoolFocus = FocusNode(debugLabel: 'edit spool details');
   String? _referenceError;
   late final StreamSubscription<NfcEvent> _nfcEvents;
   late final StreamSubscription<Uri> _incomingLinks;
@@ -102,6 +114,14 @@ final class _InventoryShellState extends State<_InventoryShell> {
   void dispose() {
     unawaited(_nfcEvents.cancel());
     unawaited(_incomingLinks.cancel());
+    _addSpoolFocus.dispose();
+    _addPlaceFocus.dispose();
+    _storageDetailFocus.dispose();
+    _materialDetailFocus.dispose();
+    _editStorageFocus.dispose();
+    _editMaterialFocus.dispose();
+    _spoolDetailsFocus.dispose();
+    _editSpoolFocus.dispose();
     super.dispose();
   }
 
@@ -114,16 +134,31 @@ final class _InventoryShellState extends State<_InventoryShell> {
         content: _HomeView(
           onScan: widget.dependencies.nfcService.scan,
           onShowAll: () => _selectDestination(1),
+          spools: widget.dependencies.inventory.filamentSpools,
+          onOpenSpool: (spool) => setState(() {
+            _selectedIndex = 1;
+            _selectedFilamentSpool = spool;
+          }),
         ),
       ),
-      const _InventoryDestination(
+      _InventoryDestination(
         icon: Icons.album_outlined,
         label: 'Spools',
-        content: _EmptyArea(
-          icon: Icons.album_outlined,
-          title: 'Spools',
-          message: 'No active filament spools yet',
-        ),
+        content: _selectedFilamentSpool != null
+            ? SpoolDetailsView(
+                spool: _selectedFilamentSpool!,
+                onBack: () => setState(() => _selectedFilamentSpool = null),
+                onEdit: _editSpoolDetails,
+                headingFocusNode: _spoolDetailsFocus,
+                editButtonFocusNode: _editSpoolFocus,
+              )
+            : SpoolsView(
+                spools: widget.dependencies.inventory.filamentSpools,
+                onAddSpool: _registerFilamentSpool,
+                onOpenSpool: (spool) =>
+                    setState(() => _selectedFilamentSpool = spool),
+                addButtonFocusNode: _addSpoolFocus,
+              ),
       ),
       _InventoryDestination(
         icon: Icons.shelves,
@@ -133,11 +168,15 @@ final class _InventoryShellState extends State<_InventoryShell> {
                 storageSlot: _selectedStorageSlot!,
                 onRegisterTag: () => _registerTag(_selectedStorageSlot!),
                 onEdit: _editStorageSlot,
+                headingFocusNode: _storageDetailFocus,
+                editButtonFocusNode: _editStorageFocus,
               )
             : _selectedMaterialUnit != null
             ? _MaterialUnitContextView(
                 materialUnit: _selectedMaterialUnit!,
                 onEdit: _editMaterialUnit,
+                headingFocusNode: _materialDetailFocus,
+                editButtonFocusNode: _editMaterialFocus,
               )
             : _referenceError != null
             ? _ReferenceErrorView(title: _referenceError!)
@@ -149,6 +188,7 @@ final class _InventoryShellState extends State<_InventoryShell> {
                     .where((unit) => !unit.archived)
                     .toList(),
                 onAddPlace: _createPlace,
+                addButtonFocusNode: _addPlaceFocus,
                 onOpenStorageSlot: _openStorageSlot,
                 onOpenMaterialUnit: _openMaterialUnit,
               ),
@@ -169,12 +209,15 @@ final class _InventoryShellState extends State<_InventoryShell> {
           _selectedIndex == 0 &&
           _selectedStorageSlot == null &&
           _selectedMaterialUnit == null &&
+          _selectedFilamentSpool == null &&
           _referenceError == null,
       onPopInvokedWithResult: (didPop, result) {
         if (didPop) {
           return;
         }
-        if (_selectedStorageSlot != null ||
+        if (_selectedFilamentSpool != null) {
+          setState(() => _selectedFilamentSpool = null);
+        } else if (_selectedStorageSlot != null ||
             _selectedMaterialUnit != null ||
             _referenceError != null) {
           setState(() {
@@ -196,7 +239,7 @@ final class _InventoryShellState extends State<_InventoryShell> {
                 color: FilaColors.surface,
                 child: Column(
                   children: [
-                    const _AppHeader(),
+                    const FilaAppHeader(),
                     Expanded(child: content),
                   ],
                 ),
@@ -249,7 +292,112 @@ final class _InventoryShellState extends State<_InventoryShell> {
         _selectedMaterialUnit = null;
         _referenceError = null;
       }
+      if (index != 1) {
+        _selectedFilamentSpool = null;
+      }
     });
+  }
+
+  Future<void> _registerFilamentSpool() async {
+    final registration = await showModalBottomSheet<SpoolRegistration>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      builder: (context) => const RegisterSpoolSheet(),
+    );
+    if (!mounted) {
+      return;
+    }
+    if (registration == null) {
+      _addSpoolFocus.requestFocus();
+      _showInventoryUnchangedResult('Registration cancelled');
+      return;
+    }
+    try {
+      final spool = await widget.dependencies.registerUnlocatedSpool(
+        registration,
+      );
+      if (!mounted) return;
+      setState(() => _selectedFilamentSpool = spool);
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _spoolDetailsFocus.requestFocus();
+      });
+      ScaffoldMessenger.of(context)
+        ..removeCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(
+            content: Semantics(
+              liveRegion: true,
+              child: Text('Filament spool registered'),
+            ),
+          ),
+        );
+    } catch (_) {
+      if (!mounted) return;
+      _addSpoolFocus.requestFocus();
+      ScaffoldMessenger.of(context)
+        ..removeCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(
+            content: Semantics(
+              liveRegion: true,
+              child: const Text(
+                'Could not register filament spool. Try again.',
+              ),
+            ),
+          ),
+        );
+    }
+  }
+
+  Future<void> _editSpoolDetails() async {
+    final spool = _selectedFilamentSpool;
+    if (spool == null) return;
+    final updated = await showModalBottomSheet<SpoolRegistration>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      builder: (context) => RegisterSpoolSheet(editingSpool: spool),
+    );
+    if (!mounted) return;
+    if (updated == null) {
+      _editSpoolFocus.requestFocus();
+      return;
+    }
+    try {
+      final saved = await widget.dependencies.editSpoolDetails(
+        spool.id,
+        updated.description,
+      );
+      if (!mounted) return;
+      setState(() => _selectedFilamentSpool = saved);
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _spoolDetailsFocus.requestFocus();
+      });
+      ScaffoldMessenger.of(context)
+        ..removeCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(
+            content: Semantics(
+              liveRegion: true,
+              child: const Text('Filament spool details saved'),
+            ),
+          ),
+        );
+    } catch (_) {
+      if (!mounted) return;
+      _editSpoolFocus.requestFocus();
+      ScaffoldMessenger.of(context)
+        ..removeCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(
+            content: Semantics(
+              liveRegion: true,
+              child: const Text('Could not save details. Try again.'),
+            ),
+          ),
+        );
+    }
   }
 
   Future<void> _createPlace() async {
@@ -265,6 +413,7 @@ final class _InventoryShellState extends State<_InventoryShell> {
       case _PlaceKind.materialUnit:
         await _createMaterialUnit();
       case null:
+        _addPlaceFocus.requestFocus();
         break;
     }
   }
@@ -279,9 +428,13 @@ final class _InventoryShellState extends State<_InventoryShell> {
       ),
     );
     if (storageSlot == null || !mounted) {
+      if (mounted) _addPlaceFocus.requestFocus();
       return;
     }
     setState(() => _selectedStorageSlot = storageSlot);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _storageDetailFocus.requestFocus();
+    });
     _showPlaceSaved('Storage slot created');
   }
 
@@ -298,7 +451,12 @@ final class _InventoryShellState extends State<_InventoryShell> {
     );
     if (renamed != null && mounted) {
       setState(() => _selectedStorageSlot = renamed);
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _storageDetailFocus.requestFocus();
+      });
       _showPlaceSaved('Storage slot saved');
+    } else if (mounted) {
+      _editStorageFocus.requestFocus();
     }
   }
 
@@ -313,7 +471,12 @@ final class _InventoryShellState extends State<_InventoryShell> {
     );
     if (unit != null && mounted) {
       setState(() => _selectedMaterialUnit = unit);
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _materialDetailFocus.requestFocus();
+      });
       _showPlaceSaved('Material unit created');
+    } else if (mounted) {
+      _addPlaceFocus.requestFocus();
     }
   }
 
@@ -336,7 +499,12 @@ final class _InventoryShellState extends State<_InventoryShell> {
     );
     if (renamed != null && mounted) {
       setState(() => _selectedMaterialUnit = renamed);
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _materialDetailFocus.requestFocus();
+      });
       _showPlaceSaved('Material unit saved');
+    } else if (mounted) {
+      _editMaterialFocus.requestFocus();
     }
   }
 
@@ -517,11 +685,11 @@ final class _ReferenceErrorView extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const _Eyebrow('Nothing changed'),
+              const FilaEyebrow('Nothing changed'),
               const SizedBox(height: 4),
               Text(title, style: Theme.of(context).textTheme.displayMedium),
               const SizedBox(height: 20),
-              const _PrototypeCard(
+              const FilaCard(
                 child: _EmptyCardContent(
                   icon: Icons.nfc_outlined,
                   title: 'No inventory changes were made.',
@@ -538,8 +706,29 @@ final class _ReferenceErrorView extends StatelessWidget {
 
 enum _PlaceKind { storageSlot, materialUnit }
 
-final class _ChoosePlaceTypeSheet extends StatelessWidget {
+final class _ChoosePlaceTypeSheet extends StatefulWidget {
   const _ChoosePlaceTypeSheet();
+
+  @override
+  State<_ChoosePlaceTypeSheet> createState() => _ChoosePlaceTypeSheetState();
+}
+
+final class _ChoosePlaceTypeSheetState extends State<_ChoosePlaceTypeSheet> {
+  final _headingFocus = FocusNode(debugLabel: 'choose place type heading');
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _headingFocus.requestFocus();
+    });
+  }
+
+  @override
+  void dispose() {
+    _headingFocus.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -550,11 +739,17 @@ final class _ChoosePlaceTypeSheet extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            const _Eyebrow('New place'),
+            const FilaEyebrow('New place'),
             const SizedBox(height: 6),
-            Text(
-              'Choose place type',
-              style: Theme.of(context).textTheme.headlineMedium,
+            Focus(
+              focusNode: _headingFocus,
+              child: Semantics(
+                header: true,
+                child: Text(
+                  'Choose place type',
+                  style: Theme.of(context).textTheme.headlineMedium,
+                ),
+              ),
             ),
             const SizedBox(height: 8),
             Text(
@@ -597,7 +792,7 @@ final class _PlaceTypeTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return _PrototypeCard(
+    return FilaCard(
       child: Material(
         color: Colors.transparent,
         child: ListTile(
@@ -618,6 +813,7 @@ final class _PlacesView extends StatelessWidget {
     required this.storageSlots,
     required this.materialUnits,
     required this.onAddPlace,
+    required this.addButtonFocusNode,
     required this.onOpenStorageSlot,
     required this.onOpenMaterialUnit,
   });
@@ -625,6 +821,7 @@ final class _PlacesView extends StatelessWidget {
   final List<StorageSlot> storageSlots;
   final List<MaterialUnit> materialUnits;
   final Future<void> Function() onAddPlace;
+  final FocusNode addButtonFocusNode;
   final ValueChanged<StorageSlot> onOpenStorageSlot;
   final ValueChanged<MaterialUnit> onOpenMaterialUnit;
 
@@ -643,13 +840,14 @@ final class _PlacesView extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const _Eyebrow('Local inventory'),
+              const FilaEyebrow('Local inventory'),
               const SizedBox(height: 4),
               Text('Places', style: Theme.of(context).textTheme.displayMedium),
               const SizedBox(height: 16),
               SizedBox(
                 width: double.infinity,
                 child: FilledButton.icon(
+                  focusNode: addButtonFocusNode,
                   onPressed: onAddPlace,
                   icon: const Icon(Icons.add),
                   label: const Text('Add place'),
@@ -657,7 +855,7 @@ final class _PlacesView extends StatelessWidget {
               ),
               const SizedBox(height: 20),
               if (storageSlots.isEmpty && materialUnits.isEmpty)
-                const _PrototypeCard(
+                const FilaCard(
                   child: _EmptyCardContent(
                     icon: Icons.shelves,
                     title: 'No storage slots or material units yet',
@@ -665,7 +863,7 @@ final class _PlacesView extends StatelessWidget {
                   ),
                 )
               else ...[
-                if (storageSlots.isNotEmpty) const _Eyebrow('Storage slots'),
+                if (storageSlots.isNotEmpty) const FilaEyebrow('Storage slots'),
                 for (final area in areas.entries) ...[
                   const SizedBox(height: 12),
                   Text(
@@ -676,7 +874,7 @@ final class _PlacesView extends StatelessWidget {
                   for (final storageSlot in storageSlots.where(
                     (slot) => placeNameKey(slot.area ?? '') == area.key,
                   )) ...[
-                    _PrototypeCard(
+                    FilaCard(
                       child: Material(
                         color: Colors.transparent,
                         child: ListTile(
@@ -700,10 +898,10 @@ final class _PlacesView extends StatelessWidget {
                 ],
                 if (materialUnits.isNotEmpty) ...[
                   const SizedBox(height: 16),
-                  const _Eyebrow('Material units'),
+                  const FilaEyebrow('Material units'),
                   const SizedBox(height: 12),
                   for (final unit in materialUnits) ...[
-                    _PrototypeCard(
+                    FilaCard(
                       child: Material(
                         color: Colors.transparent,
                         child: ListTile(
@@ -735,11 +933,15 @@ final class _StorageSlotContextView extends StatelessWidget {
     required this.storageSlot,
     required this.onRegisterTag,
     required this.onEdit,
+    required this.headingFocusNode,
+    required this.editButtonFocusNode,
   });
 
   final StorageSlot storageSlot;
   final Future<void> Function() onRegisterTag;
   final Future<void> Function() onEdit;
+  final FocusNode headingFocusNode;
+  final FocusNode editButtonFocusNode;
 
   @override
   Widget build(BuildContext context) {
@@ -752,17 +954,23 @@ final class _StorageSlotContextView extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const _Eyebrow('Storage slot'),
+              const FilaEyebrow('Storage slot'),
               const SizedBox(height: 4),
-              Text(
-                storageSlot.name,
-                style: Theme.of(context).textTheme.displayMedium,
+              Focus(
+                focusNode: headingFocusNode,
+                child: Semantics(
+                  header: true,
+                  child: Text(
+                    storageSlot.name,
+                    style: Theme.of(context).textTheme.displayMedium,
+                  ),
+                ),
               ),
               const SizedBox(height: 10),
               _PlaceStatusPill(archived: storageSlot.archived),
               if (storageSlot.area != null) Text(storageSlot.area!),
               const SizedBox(height: 20),
-              _PrototypeCard(
+              FilaCard(
                 child: _EmptyCardContent(
                   icon: Icons.inventory_2_outlined,
                   title: storageSlot.occupantId == null ? 'Empty' : 'Occupied',
@@ -775,6 +983,7 @@ final class _StorageSlotContextView extends StatelessWidget {
               SizedBox(
                 width: double.infinity,
                 child: OutlinedButton.icon(
+                  focusNode: editButtonFocusNode,
                   onPressed: onEdit,
                   icon: const Icon(Icons.edit_outlined),
                   label: const Text('Edit storage slot'),
@@ -801,10 +1010,14 @@ final class _MaterialUnitContextView extends StatelessWidget {
   const _MaterialUnitContextView({
     required this.materialUnit,
     required this.onEdit,
+    required this.headingFocusNode,
+    required this.editButtonFocusNode,
   });
 
   final MaterialUnit materialUnit;
   final Future<void> Function() onEdit;
+  final FocusNode headingFocusNode;
+  final FocusNode editButtonFocusNode;
 
   @override
   Widget build(BuildContext context) {
@@ -817,17 +1030,23 @@ final class _MaterialUnitContextView extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const _Eyebrow('Material unit'),
+              const FilaEyebrow('Material unit'),
               const SizedBox(height: 4),
-              Text(
-                materialUnit.name,
-                style: Theme.of(context).textTheme.displayMedium,
+              Focus(
+                focusNode: headingFocusNode,
+                child: Semantics(
+                  header: true,
+                  child: Text(
+                    materialUnit.name,
+                    style: Theme.of(context).textTheme.displayMedium,
+                  ),
+                ),
               ),
               const SizedBox(height: 10),
               _PlaceStatusPill(archived: materialUnit.archived),
               const SizedBox(height: 20),
               for (final slot in materialUnit.activeSlots) ...[
-                _PrototypeCard(
+                FilaCard(
                   child: ListTile(
                     contentPadding: EdgeInsets.zero,
                     leading: const Icon(Icons.view_module_outlined),
@@ -842,6 +1061,7 @@ final class _MaterialUnitContextView extends StatelessWidget {
               SizedBox(
                 width: double.infinity,
                 child: OutlinedButton.icon(
+                  focusNode: editButtonFocusNode,
                   onPressed: onEdit,
                   icon: const Icon(Icons.edit_outlined),
                   label: const Text('Edit material unit'),
@@ -869,7 +1089,7 @@ final class _RegisterTagSheet extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            const _Eyebrow('Confirm tag write'),
+            const FilaEyebrow('Confirm tag write'),
             const SizedBox(height: 6),
             Text(
               'Replace tag contents?',
@@ -932,7 +1152,7 @@ final class _WriteTagProgressSheetState extends State<_WriteTagProgressSheet> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            const _Eyebrow('NFC tag registration'),
+            const FilaEyebrow('NFC tag registration'),
             const SizedBox(height: 6),
             Text(
               _cancelling ? 'Cancelling…' : 'Ready to write',
@@ -961,6 +1181,7 @@ final class _WriteTagProgressSheetState extends State<_WriteTagProgressSheet> {
 
 final class _PlaceReview extends StatelessWidget {
   const _PlaceReview({
+    required this.headingFocusNode,
     required this.kind,
     required this.nameLabel,
     required this.name,
@@ -972,6 +1193,7 @@ final class _PlaceReview extends StatelessWidget {
   });
 
   final String kind;
+  final FocusNode headingFocusNode;
   final String nameLabel;
   final String name;
   final bool creating;
@@ -987,18 +1209,24 @@ final class _PlaceReview extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        _Eyebrow('Review $kind'),
+        FilaEyebrow('Review $kind'),
         const SizedBox(height: 6),
-        Text(
-          '$action this $kind?',
-          style: Theme.of(context).textTheme.headlineMedium,
+        Focus(
+          focusNode: headingFocusNode,
+          child: Semantics(
+            header: true,
+            child: Text(
+              '$action this $kind?',
+              style: Theme.of(context).textTheme.headlineMedium,
+            ),
+          ),
         ),
         const SizedBox(height: 18),
-        _PrototypeCard(
+        FilaCard(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _Eyebrow(nameLabel),
+              FilaEyebrow(nameLabel),
               const SizedBox(height: 4),
               Text(name, style: Theme.of(context).textTheme.titleMedium),
               ...details,
@@ -1070,6 +1298,8 @@ final class _StorageSlotSheet extends StatefulWidget {
 final class _StorageSlotSheetState extends State<_StorageSlotSheet> {
   late final TextEditingController _nameController;
   late final TextEditingController _areaController;
+  final _headingFocus = FocusNode(debugLabel: 'storage-slot form heading');
+  final _reviewFocus = FocusNode(debugLabel: 'storage-slot review heading');
   var _reviewing = false;
   var _saving = false;
   String? _error;
@@ -1079,12 +1309,17 @@ final class _StorageSlotSheetState extends State<_StorageSlotSheet> {
     super.initState();
     _nameController = TextEditingController(text: widget.initial?.name);
     _areaController = TextEditingController(text: widget.initial?.area);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _headingFocus.requestFocus();
+    });
   }
 
   @override
   void dispose() {
     _nameController.dispose();
     _areaController.dispose();
+    _headingFocus.dispose();
+    _reviewFocus.dispose();
     super.dispose();
   }
 
@@ -1106,17 +1341,18 @@ final class _StorageSlotSheetState extends State<_StorageSlotSheet> {
             children: _reviewing
                 ? [
                     _PlaceReview(
+                      headingFocusNode: _reviewFocus,
                       kind: 'storage slot',
                       nameLabel: 'Storage-slot name',
                       name: name,
                       creating: widget.initial == null,
                       saving: _saving,
                       onConfirm: _submit,
-                      onBack: () => setState(() => _reviewing = false),
+                      onBack: _backToEdit,
                       details: [
                         if (_areaController.text.trim().isNotEmpty) ...[
                           const SizedBox(height: 12),
-                          const _Eyebrow('Storage area'),
+                          const FilaEyebrow('Storage area'),
                           const SizedBox(height: 4),
                           Text(_areaController.text.trim()),
                         ],
@@ -1124,30 +1360,47 @@ final class _StorageSlotSheetState extends State<_StorageSlotSheet> {
                     ),
                   ]
                 : [
-                    const _Eyebrow('New place'),
+                    const FilaEyebrow('New place'),
                     const SizedBox(height: 6),
-                    Text(
-                      widget.initial == null
-                          ? 'Create storage slot'
-                          : 'Edit storage slot',
-                      style: Theme.of(context).textTheme.headlineMedium,
+                    Focus(
+                      focusNode: _headingFocus,
+                      child: Semantics(
+                        header: true,
+                        child: Text(
+                          widget.initial == null
+                              ? 'Create storage slot'
+                              : 'Edit storage slot',
+                          style: Theme.of(context).textTheme.headlineMedium,
+                        ),
+                      ),
                     ),
                     const SizedBox(height: 18),
-                    TextField(
+                    const FilaEyebrow('Required details'),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Name this storage position.',
+                      style: Theme.of(context).textTheme.bodyMedium,
+                    ),
+                    const SizedBox(height: 8),
+                    FilaFormField(
                       controller: _nameController,
-                      autofocus: true,
-                      decoration: const InputDecoration(
-                        labelText: 'Storage-slot name',
-                      ),
+                      label: 'Storage-slot name',
+                      isRequired: true,
                       onChanged: (_) => setState(() => _error = null),
                       onSubmitted: name.isEmpty ? null : (_) => _review(),
                     ),
-                    const SizedBox(height: 12),
-                    TextField(
+                    const SizedBox(height: 8),
+                    const FilaEyebrow('Optional details'),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Add a storage-area label if useful.',
+                      style: Theme.of(context).textTheme.bodyMedium,
+                    ),
+                    const SizedBox(height: 8),
+                    FilaFormField(
                       controller: _areaController,
-                      decoration: const InputDecoration(
-                        labelText: 'Storage area (optional)',
-                      ),
+                      label: 'Storage area',
+                      isRequired: false,
                       onChanged: (_) => setState(() => _error = null),
                     ),
                     if (_error != null) ...[_PlaceSheetError(_error!)],
@@ -1170,6 +1423,16 @@ final class _StorageSlotSheetState extends State<_StorageSlotSheet> {
     }
     FocusScope.of(context).unfocus();
     setState(() => _reviewing = true);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _reviewFocus.requestFocus();
+    });
+  }
+
+  void _backToEdit() {
+    setState(() => _reviewing = false);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _headingFocus.requestFocus();
+    });
   }
 
   Future<void> _submit() async {
@@ -1178,11 +1441,16 @@ final class _StorageSlotSheetState extends State<_StorageSlotSheet> {
       context: context,
       kind: 'storage slot',
       save: () => widget.onSave(_nameController.text, _areaController.text),
-      onError: (message) => setState(() {
-        _error = message;
-        _reviewing = false;
-        _saving = false;
-      }),
+      onError: (message) {
+        setState(() {
+          _error = message;
+          _reviewing = false;
+          _saving = false;
+        });
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) _headingFocus.requestFocus();
+        });
+      },
     );
   }
 }
@@ -1200,6 +1468,8 @@ final class _MaterialUnitSheet extends StatefulWidget {
 final class _MaterialUnitSheetState extends State<_MaterialUnitSheet> {
   late final TextEditingController _nameController;
   late final List<TextEditingController> _slotControllers;
+  final _headingFocus = FocusNode(debugLabel: 'material-unit form heading');
+  final _reviewFocus = FocusNode(debugLabel: 'material-unit review heading');
   var _reviewing = false;
   var _saving = false;
   String? _error;
@@ -1214,6 +1484,9 @@ final class _MaterialUnitSheetState extends State<_MaterialUnitSheet> {
             for (final slot in widget.initial!.slots)
               TextEditingController(text: slot.name),
           ];
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _headingFocus.requestFocus();
+    });
   }
 
   @override
@@ -1222,6 +1495,8 @@ final class _MaterialUnitSheetState extends State<_MaterialUnitSheet> {
     for (final controller in _slotControllers) {
       controller.dispose();
     }
+    _headingFocus.dispose();
+    _reviewFocus.dispose();
     super.dispose();
   }
 
@@ -1241,16 +1516,17 @@ final class _MaterialUnitSheetState extends State<_MaterialUnitSheet> {
           children: _reviewing
               ? [
                   _PlaceReview(
+                    headingFocusNode: _reviewFocus,
                     kind: 'material unit',
                     nameLabel: 'Material-unit name',
                     name: _nameController.text.trim(),
                     creating: widget.initial == null,
                     saving: _saving,
                     onConfirm: _submit,
-                    onBack: () => setState(() => _reviewing = false),
+                    onBack: _backToEdit,
                     details: [
                       const SizedBox(height: 12),
-                      const _Eyebrow('Material slots'),
+                      const FilaEyebrow('Material slots'),
                       for (final controller in _slotControllers) ...[
                         const SizedBox(height: 4),
                         Text(controller.text.trim()),
@@ -1259,35 +1535,51 @@ final class _MaterialUnitSheetState extends State<_MaterialUnitSheet> {
                   ),
                 ]
               : [
-                  const _Eyebrow('Places'),
+                  const FilaEyebrow('Places'),
                   const SizedBox(height: 6),
-                  Text(
-                    widget.initial == null
-                        ? 'Create material unit'
-                        : 'Edit material unit',
-                    style: Theme.of(context).textTheme.headlineMedium,
+                  Focus(
+                    focusNode: _headingFocus,
+                    child: Semantics(
+                      header: true,
+                      child: Text(
+                        widget.initial == null
+                            ? 'Create material unit'
+                            : 'Edit material unit',
+                        style: Theme.of(context).textTheme.headlineMedium,
+                      ),
+                    ),
                   ),
                   const SizedBox(height: 18),
-                  TextField(
+                  const FilaEyebrow('Required details'),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Name the holder and every material slot.',
+                    style: Theme.of(context).textTheme.bodyMedium,
+                  ),
+                  const SizedBox(height: 8),
+                  FilaFormField(
                     controller: _nameController,
-                    decoration: const InputDecoration(
-                      labelText: 'Material-unit name',
-                    ),
+                    label: 'Material-unit name',
+                    isRequired: true,
                     onChanged: (_) => setState(() => _error = null),
                   ),
                   const SizedBox(height: 16),
-                  const _Eyebrow('Material slots'),
+                  const FilaEyebrow('Material slots'),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Give each slot a distinct name.',
+                    style: Theme.of(context).textTheme.bodyMedium,
+                  ),
                   const SizedBox(height: 8),
                   for (
                     var index = 0;
                     index < _slotControllers.length;
                     index++
                   ) ...[
-                    TextField(
+                    FilaFormField(
                       controller: _slotControllers[index],
-                      decoration: InputDecoration(
-                        labelText: 'Material-slot name ${index + 1}',
-                      ),
+                      label: 'Material-slot name ${index + 1}',
+                      isRequired: true,
                       onChanged: (_) => setState(() => _error = null),
                     ),
                     const SizedBox(height: 8),
@@ -1330,6 +1622,16 @@ final class _MaterialUnitSheetState extends State<_MaterialUnitSheet> {
     }
     FocusScope.of(context).unfocus();
     setState(() => _reviewing = true);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _reviewFocus.requestFocus();
+    });
+  }
+
+  void _backToEdit() {
+    setState(() => _reviewing = false);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _headingFocus.requestFocus();
+    });
   }
 
   Future<void> _submit() async {
@@ -1340,11 +1642,16 @@ final class _MaterialUnitSheetState extends State<_MaterialUnitSheet> {
       save: () => widget.onSave(_nameController.text, [
         for (final controller in _slotControllers) controller.text,
       ]),
-      onError: (message) => setState(() {
-        _error = message;
-        _reviewing = false;
-        _saving = false;
-      }),
+      onError: (message) {
+        setState(() {
+          _error = message;
+          _reviewing = false;
+          _saving = false;
+        });
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) _headingFocus.requestFocus();
+        });
+      },
     );
   }
 }
@@ -1449,82 +1756,6 @@ final class _CompactDestinationButton extends StatelessWidget {
   }
 }
 
-final class _AppHeader extends StatelessWidget {
-  const _AppHeader();
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 18, 20, 12),
-      child: Row(
-        children: [
-          Container(
-            width: 38,
-            height: 38,
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              color: FilaColors.green,
-              borderRadius: BorderRadius.circular(13),
-            ),
-            child: const Text(
-              'F',
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 18,
-                fontWeight: FontWeight.w900,
-                letterSpacing: -1.4,
-              ),
-            ),
-          ),
-          const SizedBox(width: 12),
-          const Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'FilaManager',
-                  style: TextStyle(
-                    color: FilaColors.ink,
-                    fontSize: 18,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: -0.5,
-                  ),
-                ),
-                Text(
-                  'Scan-led context',
-                  style: TextStyle(color: FilaColors.muted, fontSize: 12),
-                ),
-              ],
-            ),
-          ),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-            decoration: BoxDecoration(
-              color: FilaColors.greenLight,
-              borderRadius: BorderRadius.circular(999),
-            ),
-            child: const Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(Icons.circle, size: 9, color: FilaColors.green),
-                SizedBox(width: 6),
-                Text(
-                  'Local',
-                  style: TextStyle(
-                    color: FilaColors.green,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
 final class _InventoryDestination {
   const _InventoryDestination({
     required this.icon,
@@ -1538,10 +1769,17 @@ final class _InventoryDestination {
 }
 
 final class _HomeView extends StatelessWidget {
-  const _HomeView({required this.onScan, required this.onShowAll});
+  const _HomeView({
+    required this.onScan,
+    required this.onShowAll,
+    required this.spools,
+    required this.onOpenSpool,
+  });
 
   final Future<void> Function() onScan;
   final VoidCallback onShowAll;
+  final List<FilamentSpool> spools;
+  final ValueChanged<FilamentSpool> onOpenSpool;
 
   @override
   Widget build(BuildContext context) {
@@ -1554,7 +1792,7 @@ final class _HomeView extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const _Eyebrow('Ready when you are'),
+              const FilaEyebrow('Ready when you are'),
               const SizedBox(height: 8),
               Text(
                 'Find the slot.\nMove the spool.',
@@ -1575,7 +1813,7 @@ final class _HomeView extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const _Eyebrow('Manual lookup'),
+                        const FilaEyebrow('Manual lookup'),
                         const SizedBox(height: 3),
                         Text(
                           'Find a spool',
@@ -1591,13 +1829,22 @@ final class _HomeView extends StatelessWidget {
                 ],
               ),
               const SizedBox(height: 10),
-              const _PrototypeCard(
-                child: _EmptyCardContent(
-                  icon: Icons.album_outlined,
-                  title: 'No active filament spools yet',
-                  message: 'Registered filament spools will appear here.',
-                ),
-              ),
+              if (spools.isEmpty)
+                const FilaCard(
+                  child: _EmptyCardContent(
+                    icon: Icons.album_outlined,
+                    title: 'No active filament spools yet',
+                    message: 'Registered filament spools will appear here.',
+                  ),
+                )
+              else
+                for (final spool in spools.take(3)) ...[
+                  FilamentSpoolTile(
+                    spool: spool,
+                    onTap: () => onOpenSpool(spool),
+                  ),
+                  const SizedBox(height: 12),
+                ],
             ],
           ),
         ),
@@ -1719,11 +1966,11 @@ final class _EmptyArea extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const _Eyebrow('Local inventory'),
+              const FilaEyebrow('Local inventory'),
               const SizedBox(height: 4),
               Text(title, style: Theme.of(context).textTheme.displayMedium),
               const SizedBox(height: 20),
-              _PrototypeCard(
+              FilaCard(
                 child: _EmptyCardContent(
                   icon: icon,
                   title: message,
@@ -1733,25 +1980,6 @@ final class _EmptyArea extends StatelessWidget {
             ],
           ),
         ),
-      ),
-    );
-  }
-}
-
-final class _Eyebrow extends StatelessWidget {
-  const _Eyebrow(this.text);
-
-  final String text;
-
-  @override
-  Widget build(BuildContext context) {
-    return Text(
-      text.toUpperCase(),
-      style: const TextStyle(
-        color: FilaColors.muted,
-        fontSize: 11,
-        fontWeight: FontWeight.w800,
-        letterSpacing: 1.1,
       ),
     );
   }
@@ -1785,33 +2013,6 @@ final class _PlaceStatusPill extends StatelessWidget {
           ),
         ),
       ),
-    );
-  }
-}
-
-final class _PrototypeCard extends StatelessWidget {
-  const _PrototypeCard({required this.child});
-
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        border: Border.all(color: FilaColors.line),
-        borderRadius: BorderRadius.circular(22),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x0D1D3024),
-            blurRadius: 20,
-            offset: Offset(0, 5),
-          ),
-        ],
-      ),
-      child: child,
     );
   }
 }

@@ -2,13 +2,12 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:filamanager/inventory/material_unit.dart';
+import 'package:filamanager/inventory/filament_spool.dart';
 import 'package:filamanager/inventory/storage_slot.dart';
 import 'package:filamanager/persistence/inventory_store.dart';
 
 final class JsonInventoryStore implements InventoryStore {
   JsonInventoryStore(this.file);
-
-  static const currentSchemaVersion = 2;
 
   final File file;
   Future<InventoryDocument>? _opening;
@@ -28,24 +27,31 @@ final class JsonInventoryStore implements InventoryStore {
         'Inventory store must contain a JSON object.',
       );
     }
-
-    final schemaVersion = decoded['schemaVersion'];
-    if (schemaVersion is! int ||
-        (schemaVersion != 1 && schemaVersion != currentSchemaVersion)) {
-      throw FormatException('Unsupported inventory schema: $schemaVersion');
-    }
-
-    final storageSlotsJson = decoded['storageSlots'] ?? const <Object>[];
+    final storageSlotsJson = decoded['storageSlots'];
     if (storageSlotsJson is! List) {
       throw const FormatException('Inventory storage slots must be a list.');
     }
-    final materialUnitsJson = decoded['materialUnits'] ?? const <Object>[];
+    final materialUnitsJson = decoded['materialUnits'];
     if (materialUnitsJson is! List) {
       throw const FormatException('Inventory material units must be a list.');
     }
 
-    return InventoryDocument(
-      schemaVersion: currentSchemaVersion,
+    final filamentSpoolsJson = decoded['filamentSpools'];
+    if (filamentSpoolsJson is! List) {
+      throw const FormatException('Inventory filament spools must be a list.');
+    }
+    final filamentSpools = [
+      for (final spoolJson in filamentSpoolsJson)
+        if (spoolJson is Map<String, dynamic>)
+          FilamentSpool.fromJson(spoolJson)
+        else
+          throw const FormatException('Invalid filament spool entry.'),
+    ];
+    if (filamentSpools.map((spool) => spool.id).toSet().length !=
+        filamentSpools.length) {
+      throw const FormatException('Duplicate filament-spool identity.');
+    }
+    final inventory = InventoryDocument(
       storageSlots: [
         for (final storageSlotJson in storageSlotsJson)
           if (storageSlotJson is Map<String, dynamic>)
@@ -60,27 +66,53 @@ final class JsonInventoryStore implements InventoryStore {
           else
             throw const FormatException('Invalid material unit entry.'),
       ],
+      filamentSpools: filamentSpools,
     );
+    _rejectUnknownFields(decoded, {
+      ..._encodeInventory(inventory),
+      if (decoded.containsKey('schemaVersion'))
+        'schemaVersion': decoded['schemaVersion'],
+    });
+    return inventory;
   }
 
   @override
   Future<void> save(InventoryDocument inventory) async {
     await file.parent.create(recursive: true);
     final temporaryFile = File('${file.path}.tmp');
-    final contents = jsonEncode(<String, Object>{
-      'schemaVersion': currentSchemaVersion,
-      'storageSlots': [
-        for (final storageSlot in inventory.storageSlots) storageSlot.toJson(),
-      ],
-      'materialUnits': [
-        for (final unit in inventory.materialUnits) unit.toJson(),
-      ],
-    });
+    final contents = jsonEncode(_encodeInventory(inventory));
     await temporaryFile.writeAsString(contents, flush: true);
     await temporaryFile.rename(file.path);
   }
 
+  Map<String, Object> _encodeInventory(InventoryDocument inventory) => {
+    'storageSlots': [
+      for (final storageSlot in inventory.storageSlots) storageSlot.toJson(),
+    ],
+    'materialUnits': [
+      for (final unit in inventory.materialUnits) unit.toJson(),
+    ],
+    'filamentSpools': [
+      for (final spool in inventory.filamentSpools) spool.toJson(),
+    ],
+  };
+
+  void _rejectUnknownFields(Object? stored, Object? recognized) {
+    if (stored is Map && recognized is Map) {
+      for (final key in stored.keys) {
+        if (!recognized.containsKey(key)) {
+          throw const FormatException('Inventory store has unknown fields.');
+        }
+        _rejectUnknownFields(stored[key], recognized[key]);
+      }
+    } else if (stored is List && recognized is List) {
+      for (var index = 0; index < stored.length; index++) {
+        _rejectUnknownFields(stored[index], recognized[index]);
+      }
+    }
+  }
+
   Future<void> _createEmptyStore() async {
-    await save(const InventoryDocument(schemaVersion: currentSchemaVersion));
+    await save(const InventoryDocument());
   }
 }

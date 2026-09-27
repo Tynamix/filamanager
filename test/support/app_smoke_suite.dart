@@ -1,9 +1,13 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
+import 'dart:ui' show Tristate;
 
 import 'package:filamanager/app/app.dart';
+import 'package:filamanager/app/app_bootstrap.dart';
 import 'package:filamanager/app/app_dependencies.dart';
 import 'package:filamanager/infrastructure/persistence/json_inventory_store.dart';
+import 'package:filamanager/inventory/filament_spool.dart';
 import 'package:filamanager/inventory/storage_slot_id.dart';
 import 'package:filamanager/persistence/inventory_store.dart';
 import 'package:filamanager/services/incoming_link_service.dart';
@@ -15,7 +19,7 @@ const _storageSlotId = 'AbCdEfGhIjKlMnOpQrStUv';
 const _storageSlotUri =
     'https://filamanager.vibesolutions.de/s#v1.$_storageSlotId';
 
-void appSmokeSuite({bool useProductionStore = false}) {
+void appSmokeSuite() {
   late Directory temporaryDirectory;
   late InventoryStore Function() inventoryStoreFactory;
   late _SaveSignal saveSignal;
@@ -29,16 +33,10 @@ void appSmokeSuite({bool useProductionStore = false}) {
     nfcService = FakeNfcService();
     incomingLinkService = FakeIncomingLinkService();
     saveSignal = _SaveSignal();
-    if (useProductionStore) {
-      inventoryStoreFactory = () => _SignalingInventoryStore(
-        JsonInventoryStore(File('${temporaryDirectory.path}/inventory.json')),
-        saveSignal,
-      );
-    } else {
-      final inventoryStore = FakeInventoryStore();
-      inventoryStoreFactory = () =>
-          _SignalingInventoryStore(inventoryStore, saveSignal);
-    }
+    inventoryStoreFactory = () => _SignalingInventoryStore(
+      JsonInventoryStore(File('${temporaryDirectory.path}/inventory.json')),
+      saveSignal,
+    );
   });
 
   tearDown(() async {
@@ -147,6 +145,462 @@ void appSmokeSuite({bool useProductionStore = false}) {
     );
 
     expect(find.text('Scan a storage-slot tag'), findsOneWidget);
+  });
+
+  testWidgets('refuses a store missing inventory collections', (tester) async {
+    final file = File('${temporaryDirectory.path}/inventory.json');
+    for (final unreadable in [
+      '{"storageSlots":[],"materialUnits":[]}',
+      '{"materialUnits":[],"filamentSpools":[]}',
+      '{"storageSlots":[],"filamentSpools":[]}',
+    ]) {
+      await tester.runAsync(() => file.writeAsString(unreadable));
+      final startupFailure = await tester.runAsync<Object?>(() async {
+        try {
+          await AppDependencies.initialize(
+            inventoryStore: inventoryStoreFactory(),
+            nfcService: nfcService,
+            incomingLinkService: incomingLinkService,
+          );
+          return null;
+        } catch (error) {
+          return error;
+        }
+      });
+      expect(startupFailure, isA<FormatException>());
+      expect(await tester.runAsync(file.readAsString), unreadable);
+    }
+  });
+
+  testWidgets('preserves an incomplete pre-release inventory', (tester) async {
+    final file = File('${temporaryDirectory.path}/inventory.json');
+    const incomplete =
+        '{"schemaVersion":2,"storageSlots":[],"materialUnits":[]}';
+    await tester.runAsync(() => file.writeAsString(incomplete));
+
+    final startupFailure = await tester.runAsync<Object?>(() async {
+      try {
+        await AppDependencies.initialize(
+          inventoryStore: inventoryStoreFactory(),
+          nfcService: nfcService,
+          incomingLinkService: incomingLinkService,
+        );
+        return null;
+      } catch (error) {
+        return error;
+      }
+    });
+
+    expect(startupFailure, isA<FormatException>());
+    expect(await tester.runAsync(file.readAsString), incomplete);
+  });
+
+  testWidgets('preserves an inventory with unknown collection data', (
+    tester,
+  ) async {
+    final file = File('${temporaryDirectory.path}/inventory.json');
+    const incompatible =
+        '{"storageSlots":[],"materialUnits":[],"filamentSpools":[],"futureRecords":[{"id":"keep-me"}]}';
+    await tester.runAsync(() => file.writeAsString(incompatible));
+
+    final startupFailure = await tester.runAsync<Object?>(() async {
+      try {
+        await AppDependencies.initialize(
+          inventoryStore: inventoryStoreFactory(),
+          nfcService: nfcService,
+          incomingLinkService: incomingLinkService,
+        );
+        return null;
+      } catch (error) {
+        return error;
+      }
+    });
+
+    expect(startupFailure, isA<FormatException>());
+    expect(await tester.runAsync(file.readAsString), incompatible);
+  });
+
+  testWidgets('preserves an inventory with unknown record data', (
+    tester,
+  ) async {
+    final file = File('${temporaryDirectory.path}/inventory.json');
+    final incompatible = jsonEncode({
+      'storageSlots': [
+        {
+          'id': _storageSlotId,
+          'name': 'Shelf A',
+          'archived': false,
+          'futurePlacement': 'keep-me',
+        },
+      ],
+      'materialUnits': <Object>[],
+      'filamentSpools': <Object>[],
+    });
+    await tester.runAsync(() => file.writeAsString(incompatible));
+
+    final startupFailure = await tester.runAsync<Object?>(() async {
+      try {
+        await AppDependencies.initialize(
+          inventoryStore: inventoryStoreFactory(),
+          nfcService: nfcService,
+          incomingLinkService: incomingLinkService,
+        );
+        return null;
+      } catch (error) {
+        return error;
+      }
+    });
+
+    expect(startupFailure, isA<FormatException>());
+    expect(await tester.runAsync(file.readAsString), incompatible);
+  });
+
+  testWidgets('preserves incomplete place records', (tester) async {
+    final file = File('${temporaryDirectory.path}/inventory.json');
+    for (final incomplete in [
+      jsonEncode({
+        'storageSlots': [
+          {'id': _storageSlotId, 'name': 'Shelf A'},
+        ],
+        'materialUnits': <Object>[],
+        'filamentSpools': <Object>[],
+      }),
+      jsonEncode({
+        'storageSlots': <Object>[],
+        'materialUnits': [
+          {
+            'id': _storageSlotId,
+            'name': 'AMS',
+            'slots': [
+              {
+                'id': 'AaBbCcDdEeFfGgHhIiJjKk',
+                'name': 'Left',
+                'archived': false,
+              },
+            ],
+          },
+        ],
+        'filamentSpools': <Object>[],
+      }),
+      jsonEncode({
+        'storageSlots': <Object>[],
+        'materialUnits': [
+          {
+            'id': _storageSlotId,
+            'name': 'AMS',
+            'archived': false,
+            'slots': [
+              {'id': 'AaBbCcDdEeFfGgHhIiJjKk', 'name': 'Left'},
+            ],
+          },
+        ],
+        'filamentSpools': <Object>[],
+      }),
+    ]) {
+      await tester.runAsync(() => file.writeAsString(incomplete));
+      final startupFailure = await tester.runAsync<Object?>(() async {
+        try {
+          await AppDependencies.initialize(
+            inventoryStore: inventoryStoreFactory(),
+            nfcService: nfcService,
+            incomingLinkService: incomingLinkService,
+          );
+          return null;
+        } catch (error) {
+          return error;
+        }
+      });
+      expect(startupFailure, isA<FormatException>());
+      expect(await tester.runAsync(file.readAsString), incomplete);
+    }
+  });
+
+  testWidgets('shows recovery and retries after an unreadable local store', (
+    tester,
+  ) async {
+    final file = File('${temporaryDirectory.path}/inventory.json');
+    const unreadable = '{"storageSlots":[],"materialUnits":[]}';
+    await tester.runAsync(() => file.writeAsString(unreadable));
+    await tester.pumpWidget(
+      FilaManagerBootstrap(
+        createDependencies: () => AppDependencies.initialize(
+          inventoryStore: inventoryStoreFactory(),
+          nfcService: nfcService,
+          incomingLinkService: incomingLinkService,
+        ),
+      ),
+    );
+    for (var attempt = 0; attempt < 20; attempt++) {
+      await tester.pump(const Duration(milliseconds: 100));
+      if (find.text('Inventory could not be opened').evaluate().isNotEmpty) {
+        break;
+      }
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 20)),
+      );
+    }
+    expect(find.text('Inventory could not be opened'), findsOneWidget);
+    expect(
+      find.text('Local inventory data was left unchanged.'),
+      findsOneWidget,
+    );
+    expect(find.text('Retry opening inventory'), findsOneWidget);
+    expect(find.text('FilaManager'), findsOneWidget);
+    expect(find.text('Scan-led context'), findsOneWidget);
+    expect(find.text('Local'), findsOneWidget);
+    expect(find.text('Add filament spool'), findsNothing);
+    expect(await tester.runAsync(file.readAsString), unreadable);
+
+    await tester.runAsync(
+      () => file.writeAsString(
+        '{"storageSlots":[],"materialUnits":[],"filamentSpools":[]}',
+      ),
+    );
+    await tester.tap(find.text('Retry opening inventory'));
+    for (var attempt = 0; attempt < 20; attempt++) {
+      await tester.pump(const Duration(milliseconds: 100));
+      if (find.text('Scan a storage-slot tag').evaluate().isNotEmpty) {
+        break;
+      }
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 20)),
+      );
+    }
+    expect(find.text('Scan a storage-slot tag'), findsOneWidget);
+  });
+
+  testWidgets('opens an existing complete versioned spool inventory', (
+    tester,
+  ) async {
+    final file = File('${temporaryDirectory.path}/inventory.json');
+    await tester.runAsync(
+      () => file.writeAsString(
+        jsonEncode({
+          'schemaVersion': 3,
+          'storageSlots': <Object>[],
+          'materialUnits': <Object>[],
+          'filamentSpools': [
+            {
+              'id': _storageSlotId,
+              'description': {
+                'materialType': 'PETG',
+                'filamentColor': '#22AA88',
+              },
+              'remainingGrams': 750,
+              'state': 'unlocated',
+              'assignmentId': null,
+              'history': [
+                {
+                  'occurredAt': '2026-09-26T12:00:00Z',
+                  'action': 'Registered',
+                  'affectedSpoolIds': [_storageSlotId],
+                  'beforeState': null,
+                  'afterState': 'unlocated',
+                  'beforeRemainingGrams': null,
+                  'afterRemainingGrams': 750,
+                },
+              ],
+            },
+          ],
+        }),
+      ),
+    );
+
+    await _launchApp(
+      tester,
+      inventoryStoreFactory,
+      nfcService,
+      incomingLinkService,
+    );
+    await tester.tap(find.text('Spools'));
+    await _pumpInteraction(tester);
+    await tester.tap(find.widgetWithText(ListTile, 'PETG'));
+    await _pumpInteraction(tester);
+    expect(find.text('750 g'), findsWidgets);
+    expect(find.text('Registered'), findsOneWidget);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await _pumpInteraction(tester);
+    await _launchApp(
+      tester,
+      inventoryStoreFactory,
+      nfcService,
+      incomingLinkService,
+    );
+    await tester.tap(find.text('Spools'));
+    await _pumpInteraction(tester);
+    expect(find.widgetWithText(ListTile, 'PETG'), findsOneWidget);
+    final stored = jsonDecode(
+      (await tester.runAsync(file.readAsString))!,
+    ) as Map<String, dynamic>;
+    expect(stored['materialUnits'], isEmpty);
+    expect(stored['filamentSpools'], hasLength(1));
+  });
+
+  testWidgets('opens an unversioned places inventory with all collections', (
+    tester,
+  ) async {
+    final file = File('${temporaryDirectory.path}/inventory.json');
+    await tester.runAsync(
+      () => file.writeAsString(
+        jsonEncode({
+          'storageSlots': [
+            {'id': _storageSlotId, 'name': 'Shelf A', 'archived': false},
+          ],
+          'materialUnits': [
+            {
+              'id': 'ZyXwVuTsRqPoNmLkJiHgFe',
+              'name': 'AMS',
+              'archived': false,
+              'slots': [
+                {
+                  'id': 'AaBbCcDdEeFfGgHhIiJjKk',
+                  'name': 'Left',
+                  'archived': false,
+                },
+              ],
+            },
+          ],
+          'filamentSpools': <Object>[],
+        }),
+      ),
+    );
+
+    await _launchApp(
+      tester,
+      inventoryStoreFactory,
+      nfcService,
+      incomingLinkService,
+    );
+    await tester.tap(find.text('Places'));
+    await _pumpInteraction(tester);
+    expect(find.text('Shelf A'), findsOneWidget);
+    expect(find.text('AMS'), findsOneWidget);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await _pumpInteraction(tester);
+    await _launchApp(
+      tester,
+      inventoryStoreFactory,
+      nfcService,
+      incomingLinkService,
+    );
+    await tester.tap(find.text('Places'));
+    await _pumpInteraction(tester);
+    expect(find.text('Shelf A'), findsOneWidget);
+    expect(find.text('AMS'), findsOneWidget);
+    final stored = jsonDecode(
+      (await tester.runAsync(file.readAsString))!,
+    ) as Map<String, dynamic>;
+    expect(stored.containsKey('schemaVersion'), isFalse);
+    expect(stored['filamentSpools'], isEmpty);
+    expect(stored['materialUnits'], hasLength(1));
+  });
+
+  testWidgets('refuses persisted Unlocated spools with broken invariants', (
+    tester,
+  ) async {
+    final file = File('${temporaryDirectory.path}/inventory.json');
+    for (final (remaining, assignment, invalidHistory)
+        in <(int, String?, bool)>[
+          (0, null, false),
+          (500, 'unverified-place', false),
+          (500, null, true),
+        ]) {
+      final unreadable = jsonEncode({
+        'storageSlots': <Object>[],
+        'materialUnits': <Object>[],
+        'filamentSpools': [
+          {
+            'id': _storageSlotId,
+            'description': {'materialType': 'PLA', 'filamentColor': '#123456'},
+            'remainingGrams': remaining,
+            'state': 'unlocated',
+            'assignmentId': assignment,
+            'history': [
+              {
+                'occurredAt': '2026-09-26T12:00:00Z',
+                'action': 'Registered',
+                'affectedSpoolIds': [_storageSlotId],
+                'beforeState': null,
+                'afterState': 'unlocated',
+                'beforeRemainingGrams': null,
+                'afterRemainingGrams': remaining,
+              },
+              if (invalidHistory)
+                {
+                  'occurredAt': '2026-09-26T13:00:00Z',
+                  'action': 'Quantity corrected',
+                  'affectedSpoolIds': <String>[],
+                  'beforeState': 'unlocated',
+                  'afterState': 'unlocated',
+                  'beforeRemainingGrams': remaining,
+                  'afterRemainingGrams': remaining,
+                },
+            ],
+          },
+        ],
+      });
+      await tester.runAsync(() => file.writeAsString(unreadable));
+      final startupFailure = await tester.runAsync<Object?>(() async {
+        try {
+          await AppDependencies.initialize(
+            inventoryStore: inventoryStoreFactory(),
+            nfcService: nfcService,
+            incomingLinkService: incomingLinkService,
+          );
+          return null;
+        } catch (error) {
+          return error;
+        }
+      });
+      expect(startupFailure, isA<FormatException>());
+      expect(await tester.runAsync(file.readAsString), unreadable);
+    }
+  });
+
+  testWidgets('refuses two persisted filament spools with one identity', (
+    tester,
+  ) async {
+    final file = File('${temporaryDirectory.path}/inventory.json');
+    final spool = {
+      'id': _storageSlotId,
+      'description': {'materialType': 'PLA', 'filamentColor': '#123456'},
+      'remainingGrams': 500,
+      'state': 'unlocated',
+      'assignmentId': null,
+      'history': [
+        {
+          'occurredAt': '2026-09-26T12:00:00Z',
+          'action': 'Registered',
+          'affectedSpoolIds': [_storageSlotId],
+          'beforeState': null,
+          'afterState': 'unlocated',
+          'beforeRemainingGrams': null,
+          'afterRemainingGrams': 500,
+        },
+      ],
+    };
+    final unreadable = jsonEncode({
+      'storageSlots': <Object>[],
+      'materialUnits': <Object>[],
+      'filamentSpools': [spool, spool],
+    });
+    await tester.runAsync(() => file.writeAsString(unreadable));
+    final startupFailure = await tester.runAsync<Object?>(() async {
+      try {
+        await AppDependencies.initialize(
+          inventoryStore: inventoryStoreFactory(),
+          nfcService: nfcService,
+          incomingLinkService: incomingLinkService,
+        );
+        return null;
+      } catch (error) {
+        return error;
+      }
+    });
+    expect(startupFailure, isA<FormatException>());
+    expect(await tester.runAsync(file.readAsString), unreadable);
   });
 
   testWidgets('creates and reopens a persisted storage slot manually', (
@@ -470,6 +924,775 @@ void appSmokeSuite({bool useProductionStore = false}) {
     expect(find.text('Scan a storage-slot tag'), findsOneWidget);
   });
 
+  testWidgets(
+    'registers an Unlocated filament spool and finds it after restart',
+    (tester) async {
+      await _launchApp(
+        tester,
+        inventoryStoreFactory,
+        nfcService,
+        incomingLinkService,
+      );
+      await tester.tap(find.text('Spools'));
+      await _pumpInteraction(tester);
+      await tester.tap(find.text('Add filament spool'));
+      await _pumpInteraction(tester);
+
+      await tester.tap(find.text('PLA'));
+      await tester.enterText(
+        find.bySemanticsLabel('Filament color (#RRGGBB)'),
+        '#22aa88',
+      );
+      await tester.enterText(
+        find.bySemanticsLabel('Remaining quantity (g)'),
+        '750',
+      );
+      expect(
+        find.widgetWithText(OutlinedButton, 'Review filament spool'),
+        findsOneWidget,
+      );
+      await tester.tap(find.text('Review filament spool'));
+      await _pumpInteraction(tester);
+      expect(find.text('Unlocated'), findsWidgets);
+      expect(find.text('No assignment'), findsWidgets);
+
+      await _confirmSpoolRegistration(tester);
+      expect(find.text('Filament spool registered'), findsOneWidget);
+      expect(find.text('750 g'), findsWidgets);
+      expect(find.text('Registered'), findsOneWidget);
+      expect(find.text('STATE'), findsOneWidget);
+      expect(find.text('ASSIGNMENT'), findsOneWidget);
+      expect(find.text('REMAINING QUANTITY'), findsOneWidget);
+      expect(find.text('FILAMENT COLOR'), findsOneWidget);
+      expect(find.bySemanticsLabel('State: Unlocated'), findsOneWidget);
+      expect(find.text('AFFECTED'), findsOneWidget);
+      expect(find.text('this filament spool'), findsOneWidget);
+      expect(find.text('BEFORE'), findsOneWidget);
+      expect(find.text('not registered'), findsOneWidget);
+      expect(find.text('AFTER'), findsOneWidget);
+      expect(find.text('Unlocated · 750 g · no assignment'), findsOneWidget);
+
+      final savedInventory = jsonDecode(
+        (await tester.runAsync(
+          File('${temporaryDirectory.path}/inventory.json').readAsString,
+        ))!,
+      ) as Map<String, dynamic>;
+      expect(
+        savedInventory.keys,
+        containsAll(['storageSlots', 'materialUnits', 'filamentSpools']),
+      );
+      expect(savedInventory.containsKey('schemaVersion'), isFalse);
+
+      await tester.tap(find.text('Home'));
+      await _pumpInteraction(tester);
+      expect(find.text('No active filament spools yet'), findsNothing);
+      expect(find.text('PLA'), findsWidgets);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await _pumpInteraction(tester);
+      await _launchApp(
+        tester,
+        inventoryStoreFactory,
+        nfcService,
+        incomingLinkService,
+      );
+      await tester.tap(find.text('Spools'));
+      await _pumpInteraction(tester);
+      expect(find.text('PLA'), findsWidgets);
+      await tester.tap(find.text('PLA').last);
+      await _pumpInteraction(tester);
+      expect(find.text('Unlocated'), findsWidgets);
+      expect(find.text('No assignment'), findsWidgets);
+      expect(find.text('#22AA88'), findsOneWidget);
+      expect(find.text('750 g'), findsWidgets);
+      expect(find.text('Registered'), findsOneWidget);
+    },
+  );
+
+  testWidgets(
+    'invalid and cancelled registration leave no filament spool or history',
+    (tester) async {
+      await _launchApp(
+        tester,
+        inventoryStoreFactory,
+        nfcService,
+        incomingLinkService,
+      );
+      await tester.tap(find.text('Spools'));
+      await _pumpInteraction(tester);
+      await tester.tap(find.text('Add filament spool'));
+      await _pumpInteraction(tester);
+
+      await tester.enterText(find.bySemanticsLabel('Material type'), 'PLA');
+      await tester.enterText(
+        find.bySemanticsLabel('Filament color (#RRGGBB)'),
+        'clear',
+      );
+      await tester.enterText(
+        find.bySemanticsLabel('Remaining quantity (g)'),
+        '0',
+      );
+      await tester.tap(find.text('Review filament spool'));
+      await _pumpInteraction(tester);
+      expect(
+        find.text('Enter a positive whole-gram remaining quantity.'),
+        findsOneWidget,
+      );
+      final semantics = tester.ensureSemantics();
+      expect(
+        tester
+            .getSemantics(
+              find.text('Enter a positive whole-gram remaining quantity.'),
+            )
+            .flagsCollection
+            .isLiveRegion,
+        isTrue,
+      );
+      semantics.dispose();
+      expect(find.text('Register filament spool'), findsNothing);
+
+      await tester.enterText(
+        find.bySemanticsLabel('Remaining quantity (g)'),
+        '900',
+      );
+      await tester.tap(find.text('Review filament spool'));
+      await _pumpInteraction(tester);
+      expect(find.text('Choose a color in #RRGGBB format.'), findsOneWidget);
+      await tester.enterText(
+        find.bySemanticsLabel('Filament color (#RRGGBB)'),
+        '#AABBCC',
+      );
+      await tester.tap(find.text('Review filament spool'));
+      await _pumpInteraction(tester);
+      expect(find.text('Register this filament spool?'), findsOneWidget);
+      await tester.tap(find.text('Cancel'));
+      await _pumpInteraction(tester);
+      expect(find.text('No active filament spools yet'), findsOneWidget);
+      expect(find.text('No inventory changes were made.'), findsOneWidget);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await _pumpInteraction(tester);
+      await _launchApp(
+        tester,
+        inventoryStoreFactory,
+        nfcService,
+        incomingLinkService,
+      );
+      await tester.tap(find.text('Spools'));
+      await _pumpInteraction(tester);
+      expect(find.text('No active filament spools yet'), findsOneWidget);
+      expect(find.text('Registered'), findsNothing);
+    },
+  );
+
+  testWidgets('searches active filament spools by their descriptive details', (
+    tester,
+  ) async {
+    await _launchApp(
+      tester,
+      inventoryStoreFactory,
+      nfcService,
+      incomingLinkService,
+    );
+    await tester.tap(find.text('Spools'));
+    await _pumpInteraction(tester);
+    await tester.tap(find.text('Add filament spool'));
+    await _pumpInteraction(tester);
+    await tester.tap(find.text('PLA'));
+    await tester.enterText(
+      find.bySemanticsLabel('Filament color (#RRGGBB)'),
+      '#CC3333',
+    );
+    await tester.enterText(
+      find.bySemanticsLabel('Remaining quantity (g)'),
+      '500',
+    );
+    await tester.enterText(find.bySemanticsLabel('Spool label'), 'Red sample');
+    await tester.tap(find.text('Review filament spool'));
+    await _pumpInteraction(tester);
+    await _confirmSpoolRegistration(tester);
+    expect(find.text('Filament spool registered'), findsOneWidget);
+    await tester.tap(find.text('Back to spools'));
+    await _pumpInteraction(tester);
+
+    await tester.tap(find.text('Add filament spool'));
+    await _pumpInteraction(tester);
+    await tester.enterText(find.bySemanticsLabel('Material type'), 'PCTG');
+    await tester.enterText(
+      find.bySemanticsLabel('Filament color (#RRGGBB)'),
+      '#44AA77',
+    );
+    await tester.enterText(
+      find.bySemanticsLabel('Remaining quantity (g)'),
+      '850',
+    );
+    await tester.enterText(
+      find.bySemanticsLabel('Spool label'),
+      'Green sample',
+    );
+    await tester.tap(find.text('Review filament spool'));
+    await _pumpInteraction(tester);
+    await _confirmSpoolRegistration(tester);
+    await tester.tap(find.text('Back to spools'));
+    await _pumpInteraction(tester);
+
+    expect(find.text('Red sample'), findsOneWidget);
+    expect(find.text('Green sample'), findsOneWidget);
+    await tester.enterText(
+      find.bySemanticsLabel('Search filament spools'),
+      'green',
+    );
+    await _pumpInteraction(tester);
+    expect(find.text('Green sample'), findsOneWidget);
+    expect(find.text('Red sample'), findsNothing);
+    await tester.enterText(
+      find.bySemanticsLabel('Search filament spools'),
+      'pctg',
+    );
+    await _pumpInteraction(tester);
+    expect(find.text('Green sample'), findsOneWidget);
+    await tester.enterText(
+      find.bySemanticsLabel('Search filament spools'),
+      'missing',
+    );
+    await _pumpInteraction(tester);
+    expect(find.text('No matching filament spools'), findsOneWidget);
+  });
+
+  testWidgets(
+    'retries a generated identity collision before registering another spool',
+    (tester) async {
+      final generatedIds = [
+        _storageSlotId,
+        _storageSlotId,
+        'ZyXwVuTsRqPoNmLkJiHgFe',
+      ];
+      var nextId = 0;
+      await _launchApp(
+        tester,
+        inventoryStoreFactory,
+        nfcService,
+        incomingLinkService,
+        spoolIdGenerator: () => FilamentSpoolId.parse(generatedIds[nextId++]),
+      );
+      await tester.tap(find.text('Spools'));
+      await _pumpInteraction(tester);
+      for (final label in ['First roll', 'Second roll']) {
+        await tester.tap(find.text('Add filament spool'));
+        await _pumpInteraction(tester);
+        await tester.tap(find.text('PLA'));
+        await tester.enterText(
+          find.bySemanticsLabel('Filament color (#RRGGBB)'),
+          '#123456',
+        );
+        await tester.enterText(
+          find.bySemanticsLabel('Remaining quantity (g)'),
+          '500',
+        );
+        await tester.enterText(find.bySemanticsLabel('Spool label'), label);
+        await tester.tap(find.text('Review filament spool'));
+        await _pumpInteraction(tester);
+        await _confirmSpoolRegistration(tester);
+        if (label == 'First roll') {
+          await tester.tap(find.text('Back to spools'));
+          await _pumpInteraction(tester);
+        }
+      }
+
+      await tester.tap(find.text('Edit details'));
+      await _pumpInteraction(tester);
+      await tester.enterText(
+        find.bySemanticsLabel('Spool label'),
+        'Second corrected',
+      );
+      await tester.tap(find.text('Review changes'));
+      await _pumpInteraction(tester);
+      await tester.tap(find.text('Save details'));
+      for (var attempt = 0; attempt < 20; attempt++) {
+        await tester.pump(const Duration(milliseconds: 100));
+        if (find.text('Filament spool details saved').evaluate().isNotEmpty) {
+          break;
+        }
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 20)),
+        );
+      }
+      await tester.tap(find.text('Back to spools'));
+      await _pumpInteraction(tester);
+      expect(find.text('First roll'), findsOneWidget);
+      expect(find.text('Second corrected'), findsOneWidget);
+      expect(find.text('Second roll'), findsNothing);
+    },
+  );
+
+  testWidgets('edits descriptive details without adding operational history', (
+    tester,
+  ) async {
+    await _launchApp(
+      tester,
+      inventoryStoreFactory,
+      nfcService,
+      incomingLinkService,
+    );
+    await tester.tap(find.text('Spools'));
+    await _pumpInteraction(tester);
+    await tester.tap(find.text('Add filament spool'));
+    await _pumpInteraction(tester);
+    await tester.tap(find.text('PLA'));
+    await tester.enterText(
+      find.bySemanticsLabel('Filament color (#RRGGBB)'),
+      '#123456',
+    );
+    await tester.enterText(
+      find.bySemanticsLabel('Remaining quantity (g)'),
+      '500',
+    );
+    await tester.enterText(find.bySemanticsLabel('Spool label'), 'First roll');
+    await tester.tap(find.text('Review filament spool'));
+    await _pumpInteraction(tester);
+    await _confirmSpoolRegistration(tester);
+
+    await tester.tap(find.text('Edit details'));
+    await _pumpInteraction(tester);
+    expect(
+      find.text(
+        'Material and one representative color are required. Remaining quantity stays unchanged.',
+      ),
+      findsOneWidget,
+    );
+    await tester.enterText(find.bySemanticsLabel('Material type'), 'PETG');
+    await tester.enterText(
+      find.bySemanticsLabel('Filament color (#RRGGBB)'),
+      '#abcdef',
+    );
+    await tester.enterText(
+      find.bySemanticsLabel('Spool label'),
+      'Corrected roll',
+    );
+    await tester.enterText(find.bySemanticsLabel('Manufacturer'), 'Acme');
+    await tester.enterText(find.bySemanticsLabel('Product name'), 'Silk');
+    await tester.enterText(
+      find.bySemanticsLabel('Original nominal quantity (g)'),
+      '1000',
+    );
+    await tester.enterText(
+      find.bySemanticsLabel('Notes'),
+      'Transparent in person',
+    );
+    await tester.tap(find.text('Review changes'));
+    await _pumpInteraction(tester);
+    expect(
+      find.text('No change to quantity, state, assignment, or history.'),
+      findsOneWidget,
+    );
+    await tester.tap(find.text('Save details'));
+    for (var attempt = 0; attempt < 20; attempt++) {
+      await tester.pump(const Duration(milliseconds: 100));
+      if (find.text('Filament spool details saved').evaluate().isNotEmpty) {
+        break;
+      }
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 20)),
+      );
+    }
+    await tester.pumpAndSettle();
+    expect(find.text('Corrected roll'), findsOneWidget);
+    expect(find.text('#ABCDEF'), findsOneWidget);
+    expect(find.text('500 g'), findsWidgets);
+    expect(find.text('Acme'), findsOneWidget);
+    expect(find.text('Silk'), findsOneWidget);
+    expect(find.text('1000 g'), findsOneWidget);
+    expect(find.text('Transparent in person'), findsOneWidget);
+    expect(find.text('Registered'), findsOneWidget);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await _pumpInteraction(tester);
+    await _launchApp(
+      tester,
+      inventoryStoreFactory,
+      nfcService,
+      incomingLinkService,
+    );
+    await tester.tap(find.text('Spools'));
+    await _pumpInteraction(tester);
+    await tester.enterText(
+      find.bySemanticsLabel('Search filament spools'),
+      'Corrected roll',
+    );
+    await _pumpInteraction(tester);
+    await tester.tap(find.widgetWithText(ListTile, 'Corrected roll'));
+    await _pumpInteraction(tester);
+    expect(find.text('PETG'), findsOneWidget);
+    expect(find.text('Registered'), findsOneWidget);
+    expect(find.text('500 g'), findsWidgets);
+  });
+
+  testWidgets('chooses one representative color for a multicolored spool', (
+    tester,
+  ) async {
+    await _launchApp(
+      tester,
+      inventoryStoreFactory,
+      nfcService,
+      incomingLinkService,
+    );
+    await tester.tap(find.text('Spools'));
+    await _pumpInteraction(tester);
+    await tester.tap(find.text('Add filament spool'));
+    await _pumpInteraction(tester);
+    final picker = find.byTooltip('Open color picker');
+    await Scrollable.ensureVisible(tester.element(picker), alignment: 0.5);
+    await _pumpInteraction(tester);
+    await tester.tap(picker);
+    await _pumpInteraction(tester);
+    expect(find.text('Choose one representative color'), findsOneWidget);
+    final bluePreset = find.widgetWithText(ChoiceChip, 'Blue');
+    await Scrollable.ensureVisible(tester.element(bluePreset), alignment: .5);
+    await tester.pumpAndSettle();
+    await tester.tap(bluePreset);
+    await _pumpInteraction(tester);
+    await tester.tap(find.text('Apply color'));
+    await _pumpInteraction(tester);
+    await tester.enterText(
+      find.bySemanticsLabel('Material type'),
+      'Rainbow PLA',
+    );
+    await tester.enterText(
+      find.bySemanticsLabel('Remaining quantity (g)'),
+      '300',
+    );
+    await tester.tap(find.text('Review filament spool'));
+    await _pumpInteraction(tester);
+    expect(find.text('FILAMENT COLOR'), findsOneWidget);
+    expect(find.text('#3468C0'), findsOneWidget);
+    await _confirmSpoolRegistration(tester);
+    expect(find.text('#3468C0'), findsOneWidget);
+    expect(find.text('Unlocated'), findsOneWidget);
+  });
+
+  testWidgets(
+    'registration distinguishes required fields and active input values',
+    (tester) async {
+      await _launchApp(
+        tester,
+        inventoryStoreFactory,
+        nfcService,
+        incomingLinkService,
+      );
+      await tester.tap(find.text('Spools'));
+      await _pumpInteraction(tester);
+      await tester.tap(find.text('Add filament spool'));
+      await _pumpInteraction(tester);
+
+      expect(find.text('REQUIRED DETAILS'), findsOneWidget);
+      expect(find.text('OPTIONAL DETAILS'), findsOneWidget);
+      expect(find.text('Required'), findsNWidgets(3));
+      expect(find.text('Optional'), findsNWidgets(5));
+
+      await tester.tap(find.text('PETG'));
+      final material = tester.widget<TextField>(
+        find.byWidgetPredicate(
+          (widget) =>
+              widget is TextField &&
+              widget.decoration?.labelText == 'Material type',
+        ),
+      );
+      expect(material.controller?.text, 'PETG');
+      expect(material.style?.color, const Color(0xFF18211B));
+      expect(material.decoration?.labelStyle?.color, const Color(0xFF68736B));
+    },
+  );
+
+  testWidgets(
+    'integrated color field offers presets and a continuous custom picker',
+    (tester) async {
+      await _launchApp(
+        tester,
+        inventoryStoreFactory,
+        nfcService,
+        incomingLinkService,
+      );
+      await tester.tap(find.text('Spools'));
+      await _pumpInteraction(tester);
+      await tester.tap(find.text('Add filament spool'));
+      await _pumpInteraction(tester);
+
+      expect(find.text('Pick filament color'), findsNothing);
+      final openPicker = find.byTooltip('Open color picker');
+      expect(openPicker, findsOneWidget);
+      await tester.ensureVisible(openPicker);
+      await _pumpInteraction(tester);
+      await tester.tap(openPicker);
+      await _pumpInteraction(tester);
+      expect(find.text('Choose one representative color'), findsOneWidget);
+      expect(find.text('PRESETS'), findsOneWidget);
+      expect(find.text('CUSTOM COLOR'), findsOneWidget);
+      expect(find.text('Hue'), findsOneWidget);
+      expect(find.bySemanticsLabel('Hue spectrum'), findsOneWidget);
+      expect(find.text('Saturation'), findsOneWidget);
+      expect(find.text('Brightness'), findsOneWidget);
+
+      await tester.tap(find.widgetWithText(ChoiceChip, 'Blue'));
+      await _pumpInteraction(tester);
+      final hexField = find.byWidgetPredicate(
+        (widget) =>
+            widget is TextField &&
+            widget.decoration?.labelText == 'Hex color (#RRGGBB)',
+      );
+      expect(tester.widget<TextField>(hexField).controller?.text, '#3468C0');
+      await tester.ensureVisible(find.text('Hue'));
+      await tester.drag(find.byType(Slider).first, const Offset(50, 0));
+      await _pumpInteraction(tester);
+      expect(
+        tester.widget<TextField>(hexField).controller?.text,
+        isNot('#3468C0'),
+      );
+
+      await tester.enterText(hexField, '#12AB34');
+      await tester.tap(find.text('Apply color'));
+      await _pumpInteraction(tester);
+      final mainColor = find.byWidgetPredicate(
+        (widget) =>
+            widget is TextField &&
+            widget.decoration?.labelText == 'Filament color (#RRGGBB)',
+      );
+      expect(tester.widget<TextField>(mainColor).controller?.text, '#12AB34');
+    },
+  );
+
+  testWidgets(
+    'spool form and color picker fit compact screens with larger text',
+    (tester) async {
+      tester.view.physicalSize = const Size(320, 800);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      addTearDown(
+        tester.binding.platformDispatcher.clearTextScaleFactorTestValue,
+      );
+      tester.binding.platformDispatcher.textScaleFactorTestValue = 1.4;
+
+      await _launchApp(
+        tester,
+        inventoryStoreFactory,
+        nfcService,
+        incomingLinkService,
+      );
+      await tester.tap(find.text('Spools'));
+      await _pumpInteraction(tester);
+      expect(tester.takeException(), isNull);
+      await tester.tap(find.text('Add filament spool'));
+      await _pumpInteraction(tester);
+      expect(find.text('REQUIRED DETAILS'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+
+      final picker = find.byTooltip('Open color picker');
+      await Scrollable.ensureVisible(tester.element(picker), alignment: .5);
+      await _pumpInteraction(tester);
+      await tester.tap(picker);
+      await _pumpInteraction(tester);
+      expect(find.text('Choose one representative color'), findsOneWidget);
+      expect(find.text('Apply color'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'registration sheet stays inside the system inset with keyboard',
+    (tester) async {
+      tester.view.physicalSize = const Size(360, 480);
+      tester.view.devicePixelRatio = 1;
+      tester.view.padding = const FakeViewPadding(top: 48, bottom: 24);
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      addTearDown(tester.view.resetPadding);
+      addTearDown(tester.view.resetViewInsets);
+
+      await _launchApp(
+        tester,
+        inventoryStoreFactory,
+        nfcService,
+        incomingLinkService,
+      );
+      await tester.tap(find.text('Spools'));
+      await _pumpInteraction(tester);
+      await tester.tap(find.text('Add filament spool'));
+      await _pumpInteraction(tester);
+      tester.view.viewInsets = const FakeViewPadding(bottom: 260);
+      await _pumpInteraction(tester);
+
+      expect(find.text('Register as Unlocated'), findsOneWidget);
+      expect(
+        tester.getTopLeft(find.byType(BottomSheet)).dy,
+        greaterThanOrEqualTo(48),
+      );
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets('moves assistive focus through registration and back to Spools', (
+    tester,
+  ) async {
+    await _launchApp(
+      tester,
+      inventoryStoreFactory,
+      nfcService,
+      incomingLinkService,
+    );
+    final semantics = tester.ensureSemantics();
+    await tester.tap(find.text('Spools'));
+    await _pumpInteraction(tester);
+    await tester.tap(find.text('Add filament spool'));
+    await _pumpInteraction(tester);
+    expect(
+      tester
+          .getSemantics(find.text('Register as Unlocated'))
+          .flagsCollection
+          .isFocused,
+      Tristate.isTrue,
+    );
+
+    await tester.tap(find.text('PLA'));
+    await tester.enterText(
+      find.bySemanticsLabel('Filament color (#RRGGBB)'),
+      '#224466',
+    );
+    await tester.enterText(
+      find.bySemanticsLabel('Remaining quantity (g)'),
+      '650',
+    );
+    await tester.tap(find.text('Review filament spool'));
+    await _pumpInteraction(tester);
+    expect(
+      tester
+          .getSemantics(find.text('Register this filament spool?'))
+          .flagsCollection
+          .isFocused,
+      Tristate.isTrue,
+    );
+    await tester.tap(find.text('Cancel'));
+    await _pumpInteraction(tester);
+    expect(
+      tester
+          .getSemantics(find.text('Add filament spool'))
+          .flagsCollection
+          .isFocused,
+      Tristate.isTrue,
+    );
+    semantics.dispose();
+  });
+
+  testWidgets('returns focus to Add after a failed registration write', (
+    tester,
+  ) async {
+    await _launchApp(
+      tester,
+      inventoryStoreFactory,
+      nfcService,
+      incomingLinkService,
+    );
+    await tester.runAsync(
+      () => Directory('${temporaryDirectory.path}/inventory.json.tmp').create(),
+    );
+    final semantics = tester.ensureSemantics();
+    await tester.tap(find.text('Spools'));
+    await _pumpInteraction(tester);
+    await tester.tap(find.text('Add filament spool'));
+    await _pumpInteraction(tester);
+    await tester.tap(find.text('PLA'));
+    await tester.enterText(
+      find.bySemanticsLabel('Filament color (#RRGGBB)'),
+      '#123456',
+    );
+    await tester.enterText(
+      find.bySemanticsLabel('Remaining quantity (g)'),
+      '500',
+    );
+    await tester.tap(find.text('Review filament spool'));
+    await _pumpInteraction(tester);
+    await _confirmSpoolRegistration(tester);
+
+    expect(
+      find.text('Could not register filament spool. Try again.'),
+      findsOneWidget,
+    );
+    expect(find.text('No active filament spools yet'), findsOneWidget);
+    expect(
+      tester
+          .getSemantics(find.text('Add filament spool'))
+          .flagsCollection
+          .isFocused,
+      Tristate.isTrue,
+    );
+    semantics.dispose();
+  });
+
+  testWidgets('returns focus to Edit after a failed detail save', (
+    tester,
+  ) async {
+    await _launchApp(
+      tester,
+      inventoryStoreFactory,
+      nfcService,
+      incomingLinkService,
+    );
+    await tester.tap(find.text('Spools'));
+    await _pumpInteraction(tester);
+    await tester.tap(find.text('Add filament spool'));
+    await _pumpInteraction(tester);
+    await tester.tap(find.text('PLA'));
+    await tester.enterText(
+      find.bySemanticsLabel('Filament color (#RRGGBB)'),
+      '#123456',
+    );
+    await tester.enterText(
+      find.bySemanticsLabel('Remaining quantity (g)'),
+      '500',
+    );
+    await tester.enterText(
+      find.bySemanticsLabel('Spool label'),
+      'Original label',
+    );
+    await tester.tap(find.text('Review filament spool'));
+    await _pumpInteraction(tester);
+    await _confirmSpoolRegistration(tester);
+    await tester.runAsync(
+      () => Directory('${temporaryDirectory.path}/inventory.json.tmp').create(),
+    );
+
+    final semantics = tester.ensureSemantics();
+    await tester.tap(find.text('Edit details'));
+    await _pumpInteraction(tester);
+    await tester.enterText(
+      find.bySemanticsLabel('Spool label'),
+      'Unsaved label',
+    );
+    await tester.tap(find.text('Review changes'));
+    await _pumpInteraction(tester);
+    await tester.tap(find.text('Save details'));
+    for (var attempt = 0; attempt < 20; attempt++) {
+      await tester.pump(const Duration(milliseconds: 100));
+      if (find
+          .text('Could not save details. Try again.')
+          .evaluate()
+          .isNotEmpty) {
+        break;
+      }
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 20)),
+      );
+    }
+    expect(find.text('Could not save details. Try again.'), findsOneWidget);
+    await tester.pumpAndSettle();
+    expect(find.text('Original label'), findsOneWidget);
+    expect(find.text('Unsaved label'), findsNothing);
+    expect(
+      tester.getSemantics(find.text('Edit details')).flagsCollection.isFocused,
+      Tristate.isTrue,
+    );
+    semantics.dispose();
+  });
+
   testWidgets('keeps every destination reachable at compact width', (
     tester,
   ) async {
@@ -526,18 +1749,38 @@ Future<void> _createStorageSlotThroughUi(
   await _pumpInteraction(tester);
 }
 
+Future<void> _confirmSpoolRegistration(WidgetTester tester) async {
+  await tester.tap(find.text('Register filament spool'));
+  for (var attempt = 0; attempt < 20; attempt++) {
+    await tester.pump(const Duration(milliseconds: 100));
+    if (find.text('Back to spools').evaluate().isNotEmpty ||
+        find
+            .text('Could not register filament spool. Try again.')
+            .evaluate()
+            .isNotEmpty) {
+      await tester.pumpAndSettle();
+      return;
+    }
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 20)),
+    );
+  }
+}
+
 Future<void> _launchApp(
   WidgetTester tester,
   InventoryStore Function() inventoryStoreFactory,
   NfcService nfcService,
-  IncomingLinkService incomingLinkService,
-) async {
+  IncomingLinkService incomingLinkService, {
+  FilamentSpoolId Function()? spoolIdGenerator,
+}) async {
   final dependencies = await tester.runAsync(
     () => AppDependencies.initialize(
       inventoryStore: inventoryStoreFactory(),
       nfcService: nfcService,
       incomingLinkService: incomingLinkService,
       storageSlotIdGenerator: () => StorageSlotId.parse(_storageSlotId),
+      spoolIdGenerator: spoolIdGenerator,
     ),
   );
 
@@ -546,9 +1789,7 @@ Future<void> _launchApp(
 }
 
 final class FakeInventoryStore implements InventoryStore {
-  InventoryDocument _inventory = const InventoryDocument(
-    schemaVersion: JsonInventoryStore.currentSchemaVersion,
-  );
+  InventoryDocument _inventory = const InventoryDocument();
 
   @override
   Future<InventoryDocument> open() async => _inventory;

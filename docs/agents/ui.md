@@ -45,6 +45,36 @@ model.
   larger text scale, and at least 600 logical pixels; inspect the target device
   when a layout problem was reported there.
 
+## Form fields and color selection
+
+- Use the shared `FilaFormField` treatment for editable fields in guided forms.
+  Entered values use near-black ink and stronger weight; labels, hints, and
+  requirement text use muted supporting color. A muted entered value looks
+  disabled or read-only and must not sit below a darker label.
+- Separate required and optional inputs into clearly named sections with
+  uppercase eyebrows and short guidance. Mark each editable field as
+  `Required` or `Optional` in its supporting text, including on edit screens;
+  never rely on position alone to communicate whether a field can be skipped.
+- Keep a related picker inside its field. The filament-color field combines
+  editable `#RRGGBB` text, a representative swatch, and a trailing picker
+  action in one control; do not add a second full-width picker row. Keep the
+  swatch and text label together so color is never the only cue.
+- The filament-color picker offers named presets for quick choices and a
+  continuous custom selection with a saturation/brightness area, hue,
+  saturation, and brightness controls, plus direct hex entry. Show the hue
+  spectrum near its control and a live preview;
+  apply only after explicit confirmation. Cancelling leaves the draft color
+  unchanged. Transparent and multicolored filament still receives one
+  representative display color.
+- Keep guided sheets below system insets. With normal available height, keep
+  the review or confirmation action visible below the scrolling fields. When
+  the keyboard leaves too little height, let the complete sheet scroll instead
+  of allowing headers or actions to overflow the viewport.
+- On opening a guided data-entry or choice sheet, focus its heading first so
+  the keyboard does not hide the form before the hobbyist has seen it. Move
+  focus to the review heading on review, then return it to the originating
+  control or new details heading when the sheet closes.
+
 ## Production boundaries
 
 Reproduce the design in production Flutter components; do not copy the
