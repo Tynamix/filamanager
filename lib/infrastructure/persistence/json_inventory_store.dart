@@ -42,14 +42,23 @@ final class JsonInventoryStore implements InventoryStore {
     if (storageSlotsJson is! List) {
       throw const FormatException('Inventory storage slots must be a list.');
     }
-    final materialUnitsJson = schemaVersion == 1
+    final hasMaterialUnits = decoded.containsKey('materialUnits');
+    final hasFilamentSpools = decoded.containsKey('filamentSpools');
+    // Two independent increments used v2: one added places, the other spools.
+    // Accept either historical shape, but never invent both missing collections.
+    if (schemaVersion == 2 && !hasMaterialUnits && !hasFilamentSpools) {
+      throw const FormatException('Incomplete inventory schema 2.');
+    }
+    final materialUnitsJson =
+        schemaVersion == 1 || (schemaVersion == 2 && !hasMaterialUnits)
         ? const <Object>[]
         : decoded['materialUnits'];
     if (materialUnitsJson is! List) {
       throw const FormatException('Inventory material units must be a list.');
     }
 
-    final filamentSpoolsJson = schemaVersion < currentSchemaVersion
+    final filamentSpoolsJson =
+        schemaVersion == 1 || (schemaVersion == 2 && !hasFilamentSpools)
         ? const <Object>[]
         : decoded['filamentSpools'];
     if (filamentSpoolsJson is! List) {

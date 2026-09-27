@@ -1,4 +1,5 @@
 import 'package:filamanager/app/fila_components.dart';
+import 'package:filamanager/app/filament_color_picker.dart';
 import 'package:filamanager/app/fila_theme.dart';
 import 'package:filamanager/inventory/filament_spool.dart';
 import 'package:flutter/material.dart';
@@ -55,21 +56,16 @@ final class _SpoolsViewState extends State<SpoolsView> {
             children: [
               const FilaEyebrow('Local inventory'),
               const SizedBox(height: 4),
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      'Spools',
-                      style: Theme.of(context).textTheme.displayMedium,
-                    ),
-                  ),
-                  FilledButton.icon(
-                    focusNode: widget.addButtonFocusNode,
-                    onPressed: widget.onAddSpool,
-                    icon: const Icon(Icons.add),
-                    label: const Text('Add filament spool'),
-                  ),
-                ],
+              Text('Spools', style: Theme.of(context).textTheme.displayMedium),
+              const SizedBox(height: 16),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton.icon(
+                  focusNode: widget.addButtonFocusNode,
+                  onPressed: widget.onAddSpool,
+                  icon: const Icon(Icons.add),
+                  label: const Text('Add filament spool'),
+                ),
               ),
               const SizedBox(height: 20),
               TextField(
@@ -335,41 +331,7 @@ final class _RegisterSpoolSheetState extends State<RegisterSpoolSheet> {
     FocusScope.of(context).unfocus();
     final color = await showDialog<String>(
       context: context,
-      builder: (context) => SimpleDialog(
-        title: const Text('Choose one representative color'),
-        children: [
-          const Padding(
-            padding: EdgeInsets.fromLTRB(24, 0, 24, 12),
-            child: Text(
-              'For transparent or multicolored material, choose the color that helps you recognize this spool.',
-            ),
-          ),
-          for (final (name, hex) in const [
-            ('White', '#F4F2E9'),
-            ('Black', '#18211B'),
-            ('Gray', '#8A918B'),
-            ('Red', '#C54B43'),
-            ('Orange', '#D8813C'),
-            ('Yellow', '#DFBE4A'),
-            ('Green', '#369568'),
-            ('Blue', '#3468C0'),
-            ('Purple', '#8553A3'),
-            ('Pink', '#D87CA3'),
-          ])
-            SimpleDialogOption(
-              onPressed: () => Navigator.of(context).pop(hex),
-              child: Row(
-                children: [
-                  SpoolSwatch(color: hex),
-                  const SizedBox(width: 12),
-                  Text(name),
-                  const Spacer(),
-                  Text(hex),
-                ],
-              ),
-            ),
-        ],
-      ),
+      builder: (context) => FilamentColorPickerDialog(initialHex: _color.text),
     );
     if (color != null && mounted) {
       setState(() => _color.text = color);
@@ -380,7 +342,7 @@ final class _RegisterSpoolSheetState extends State<RegisterSpoolSheet> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) _materialFocus.requestFocus();
+      if (mounted) _reviewFocus.requestFocus();
     });
     final spool = widget.editingSpool;
     if (spool != null) {
@@ -459,6 +421,73 @@ final class _RegisterSpoolSheetState extends State<RegisterSpoolSheet> {
   Widget build(BuildContext context) {
     final review = _review;
     final editing = widget.editingSpool != null;
+    final header = <Widget>[
+      FilaEyebrow(
+        review == null
+            ? editing
+                  ? 'Edit filament spool'
+                  : 'New filament spool'
+            : editing
+            ? 'Review changes'
+            : 'Review filament spool',
+      ),
+      const SizedBox(height: 6),
+      Focus(
+        focusNode: _reviewFocus,
+        child: Semantics(
+          header: true,
+          child: Text(
+            review == null
+                ? editing
+                      ? 'Edit descriptive details'
+                      : 'Register as Unlocated'
+                : editing
+                ? 'Save these details?'
+                : 'Register this filament spool?',
+            style: Theme.of(context).textTheme.headlineMedium,
+          ),
+        ),
+      ),
+      const SizedBox(height: 14),
+    ];
+    final footer = <Widget>[
+      if (_error != null) ...[
+        const SizedBox(height: 8),
+        Semantics(
+          liveRegion: true,
+          child: Text(
+            _error!,
+            style: TextStyle(color: Theme.of(context).colorScheme.error),
+          ),
+        ),
+      ],
+      const SizedBox(height: 12),
+      if (review == null)
+        FilledButton(
+          onPressed: _showReview,
+          child: Text(editing ? 'Review changes' : 'Review filament spool'),
+        )
+      else ...[
+        FilledButton(
+          onPressed: () => Navigator.of(context).pop(review),
+          child: Text(editing ? 'Save details' : 'Register filament spool'),
+        ),
+        TextButton(
+          onPressed: () {
+            setState(() => _review = null);
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (mounted) _materialFocus.requestFocus();
+            });
+          },
+          child: const Text('Back to edit'),
+        ),
+      ],
+      TextButton(
+        onPressed: () => Navigator.of(context).pop(),
+        child: const Text('Cancel'),
+      ),
+    ];
+    final fields = review == null ? _form() : _reviewContents(review);
     return SafeArea(
       child: Padding(
         padding: EdgeInsets.fromLTRB(
@@ -467,86 +496,42 @@ final class _RegisterSpoolSheetState extends State<RegisterSpoolSheet> {
           20,
           16 + MediaQuery.viewInsetsOf(context).bottom,
         ),
-        child: SizedBox(
-          height: MediaQuery.sizeOf(context).height * .78,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              FilaEyebrow(
-                review == null
-                    ? editing
-                          ? 'Edit filament spool'
-                          : 'New filament spool'
-                    : editing
-                    ? 'Review changes'
-                    : 'Review filament spool',
-              ),
-              const SizedBox(height: 6),
-              Focus(
-                focusNode: _reviewFocus,
-                child: Semantics(
-                  header: true,
-                  child: Text(
-                    review == null
-                        ? editing
-                              ? 'Edit descriptive details'
-                              : 'Register as Unlocated'
-                        : editing
-                        ? 'Save these details?'
-                        : 'Register this filament spool?',
-                    style: Theme.of(context).textTheme.headlineMedium,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 14),
-              Expanded(
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final targetHeight = MediaQuery.sizeOf(context).height * .78;
+            final insets = MediaQuery.viewInsetsOf(context);
+            final safePadding = MediaQuery.viewPaddingOf(context);
+            final usableHeight =
+                (MediaQuery.sizeOf(context).height -
+                        insets.bottom -
+                        safePadding.top -
+                        safePadding.bottom -
+                        32)
+                    .clamp(0.0, constraints.maxHeight);
+            final height = targetHeight.clamp(0.0, usableHeight);
+            if (height < 360) {
+              return SizedBox(
+                height: height,
                 child: SingleChildScrollView(
-                  child: review == null ? _form() : _reviewContents(review),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [...header, fields, ...footer],
+                  ),
                 ),
+              );
+            }
+            return SizedBox(
+              height: height,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  ...header,
+                  Expanded(child: SingleChildScrollView(child: fields)),
+                  ...footer,
+                ],
               ),
-              if (_error != null) ...[
-                const SizedBox(height: 8),
-                Semantics(
-                  liveRegion: true,
-                  child: Text(
-                    _error!,
-                    style: TextStyle(
-                      color: Theme.of(context).colorScheme.error,
-                    ),
-                  ),
-                ),
-              ],
-              const SizedBox(height: 12),
-              if (review == null)
-                FilledButton(
-                  onPressed: _showReview,
-                  child: Text(
-                    editing ? 'Review changes' : 'Review filament spool',
-                  ),
-                )
-              else ...[
-                FilledButton(
-                  onPressed: () => Navigator.of(context).pop(review),
-                  child: Text(
-                    editing ? 'Save details' : 'Register filament spool',
-                  ),
-                ),
-                TextButton(
-                  onPressed: () {
-                    setState(() => _review = null);
-                    WidgetsBinding.instance.addPostFrameCallback((_) {
-                      if (mounted) _materialFocus.requestFocus();
-                    });
-                  },
-                  child: const Text('Back to edit'),
-                ),
-              ],
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(),
-                child: const Text('Cancel'),
-              ),
-            ],
-          ),
+            );
+          },
         ),
       ),
     );
@@ -555,73 +540,115 @@ final class _RegisterSpoolSheetState extends State<RegisterSpoolSheet> {
   Widget _form() => Column(
     crossAxisAlignment: CrossAxisAlignment.stretch,
     children: [
-      const Text('Choose a material type or enter your own.'),
-      Wrap(
-        spacing: 8,
-        children: [
-          for (final suggestion in ['PLA', 'PETG', 'ABS', 'TPU'])
-            ChoiceChip(
-              label: Text(suggestion),
-              selected: _material.text == suggestion,
-              onSelected: (_) => setState(() => _material.text = suggestion),
+      FilaCard(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const FilaEyebrow('Required details'),
+            const SizedBox(height: 6),
+            Text(
+              'Material, one representative color, and remaining grams are needed.',
+              style: Theme.of(context).textTheme.bodyMedium,
             ),
-        ],
-      ),
-      TextField(
-        controller: _material,
-        focusNode: _materialFocus,
-        decoration: const InputDecoration(labelText: 'Material type'),
-        onChanged: (_) => setState(() {}),
-      ),
-      TextField(
-        controller: _color,
-        decoration: const InputDecoration(
-          labelText: 'Filament color (#RRGGBB)',
+            const SizedBox(height: 16),
+            const Text('Choose a material type or enter your own.'),
+            Wrap(
+              spacing: 8,
+              children: [
+                for (final suggestion in ['PLA', 'PETG', 'ABS', 'TPU'])
+                  ChoiceChip(
+                    label: Text(suggestion),
+                    selected: _material.text == suggestion,
+                    onSelected: (_) =>
+                        setState(() => _material.text = suggestion),
+                  ),
+              ],
+            ),
+            FilaFormField(
+              controller: _material,
+              label: 'Material type',
+              isRequired: true,
+              focusNode: _materialFocus,
+              onChanged: (_) => setState(() {}),
+            ),
+            FilaFormField(
+              controller: _color,
+              label: 'Filament color (#RRGGBB)',
+              isRequired: true,
+              onChanged: (_) => setState(() {}),
+              prefixIcon: _colorPreview(),
+              suffixIcon: IconButton(
+                onPressed: _pickColor,
+                tooltip: 'Open color picker',
+                icon: const Icon(Icons.palette_outlined),
+              ),
+            ),
+            if (widget.editingSpool == null)
+              FilaFormField(
+                controller: _remaining,
+                label: 'Remaining quantity (g)',
+                isRequired: true,
+                keyboardType: TextInputType.number,
+              ),
+          ],
         ),
       ),
-      Align(
-        alignment: Alignment.centerLeft,
-        child: TextButton.icon(
-          onPressed: _pickColor,
-          icon: const Icon(Icons.palette_outlined),
-          label: const Text('Pick filament color'),
+      const SizedBox(height: 16),
+      FilaCard(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const FilaEyebrow('Optional details'),
+            const SizedBox(height: 6),
+            Text(
+              'Add these now or leave them blank.',
+              style: Theme.of(context).textTheme.bodyMedium,
+            ),
+            const SizedBox(height: 16),
+            FilaFormField(
+              controller: _label,
+              label: 'Spool label',
+              isRequired: false,
+            ),
+            FilaFormField(
+              controller: _manufacturer,
+              label: 'Manufacturer',
+              isRequired: false,
+            ),
+            FilaFormField(
+              controller: _product,
+              label: 'Product name',
+              isRequired: false,
+            ),
+            FilaFormField(
+              controller: _nominal,
+              label: 'Original nominal quantity (g)',
+              isRequired: false,
+              keyboardType: TextInputType.number,
+            ),
+            FilaFormField(
+              controller: _notes,
+              label: 'Notes',
+              isRequired: false,
+              maxLines: 3,
+            ),
+          ],
         ),
-      ),
-      if (widget.editingSpool == null)
-        TextField(
-          controller: _remaining,
-          keyboardType: TextInputType.number,
-          decoration: const InputDecoration(
-            labelText: 'Remaining quantity (g)',
-          ),
-        ),
-      const SizedBox(height: 12),
-      const FilaEyebrow('Optional details'),
-      TextField(
-        controller: _label,
-        decoration: const InputDecoration(labelText: 'Spool label'),
-      ),
-      TextField(
-        controller: _manufacturer,
-        decoration: const InputDecoration(labelText: 'Manufacturer'),
-      ),
-      TextField(
-        controller: _product,
-        decoration: const InputDecoration(labelText: 'Product name'),
-      ),
-      TextField(
-        controller: _nominal,
-        keyboardType: TextInputType.number,
-        decoration: const InputDecoration(
-          labelText: 'Original nominal quantity (g)',
-        ),
-      ),
-      TextField(
-        controller: _notes,
-        decoration: const InputDecoration(labelText: 'Notes'),
       ),
     ],
   );
+
+  Widget _colorPreview() {
+    try {
+      final color = SpoolDescription.normalizeFilamentColor(_color.text);
+      return Padding(
+        padding: const EdgeInsets.all(7),
+        child: SpoolSwatch(color: color),
+      );
+    } on FormatException {
+      return const Icon(Icons.circle_outlined, color: FilaColors.muted);
+    }
+  }
 
   Widget _reviewContents(SpoolRegistration registration) {
     final description = registration.description;

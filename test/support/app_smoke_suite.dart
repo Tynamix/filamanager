@@ -229,6 +229,134 @@ void appSmokeSuite() {
     expect(find.text('Scan a storage-slot tag'), findsOneWidget);
   });
 
+  testWidgets('opens a legacy schema-2 spool inventory after rebasing places', (
+    tester,
+  ) async {
+    final file = File('${temporaryDirectory.path}/inventory.json');
+    await tester.runAsync(
+      () => file.writeAsString(
+        jsonEncode({
+          'schemaVersion': 2,
+          'storageSlots': <Object>[],
+          'filamentSpools': [
+            {
+              'id': _storageSlotId,
+              'description': {
+                'materialType': 'PETG',
+                'filamentColor': '#22AA88',
+              },
+              'remainingGrams': 750,
+              'state': 'unlocated',
+              'assignmentId': null,
+              'history': [
+                {
+                  'occurredAt': '2026-09-26T12:00:00Z',
+                  'action': 'Registered',
+                  'affectedSpoolIds': [_storageSlotId],
+                  'beforeState': null,
+                  'afterState': 'unlocated',
+                  'beforeRemainingGrams': null,
+                  'afterRemainingGrams': 750,
+                },
+              ],
+            },
+          ],
+        }),
+      ),
+    );
+
+    await _launchApp(
+      tester,
+      inventoryStoreFactory,
+      nfcService,
+      incomingLinkService,
+    );
+    await tester.tap(find.text('Spools'));
+    await _pumpInteraction(tester);
+    await tester.tap(find.widgetWithText(ListTile, 'PETG'));
+    await _pumpInteraction(tester);
+    expect(find.text('750 g'), findsWidgets);
+    expect(find.text('Registered'), findsOneWidget);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await _pumpInteraction(tester);
+    await _launchApp(
+      tester,
+      inventoryStoreFactory,
+      nfcService,
+      incomingLinkService,
+    );
+    await tester.tap(find.text('Spools'));
+    await _pumpInteraction(tester);
+    expect(find.widgetWithText(ListTile, 'PETG'), findsOneWidget);
+    final migrated = jsonDecode(
+      (await tester.runAsync(file.readAsString))!,
+    ) as Map<String, dynamic>;
+    expect(migrated['schemaVersion'], JsonInventoryStore.currentSchemaVersion);
+    expect(migrated['materialUnits'], isEmpty);
+    expect(migrated['filamentSpools'], hasLength(1));
+  });
+
+  testWidgets('opens a legacy schema-2 places inventory after adding spools', (
+    tester,
+  ) async {
+    final file = File('${temporaryDirectory.path}/inventory.json');
+    await tester.runAsync(
+      () => file.writeAsString(
+        jsonEncode({
+          'schemaVersion': 2,
+          'storageSlots': [
+            {'id': _storageSlotId, 'name': 'Shelf A', 'archived': false},
+          ],
+          'materialUnits': [
+            {
+              'id': 'ZyXwVuTsRqPoNmLkJiHgFe',
+              'name': 'AMS',
+              'archived': false,
+              'slots': [
+                {
+                  'id': 'AaBbCcDdEeFfGgHhIiJjKk',
+                  'name': 'Left',
+                  'archived': false,
+                },
+              ],
+            },
+          ],
+        }),
+      ),
+    );
+
+    await _launchApp(
+      tester,
+      inventoryStoreFactory,
+      nfcService,
+      incomingLinkService,
+    );
+    await tester.tap(find.text('Places'));
+    await _pumpInteraction(tester);
+    expect(find.text('Shelf A'), findsOneWidget);
+    expect(find.text('AMS'), findsOneWidget);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await _pumpInteraction(tester);
+    await _launchApp(
+      tester,
+      inventoryStoreFactory,
+      nfcService,
+      incomingLinkService,
+    );
+    await tester.tap(find.text('Places'));
+    await _pumpInteraction(tester);
+    expect(find.text('Shelf A'), findsOneWidget);
+    expect(find.text('AMS'), findsOneWidget);
+    final migrated = jsonDecode(
+      (await tester.runAsync(file.readAsString))!,
+    ) as Map<String, dynamic>;
+    expect(migrated['schemaVersion'], JsonInventoryStore.currentSchemaVersion);
+    expect(migrated['filamentSpools'], isEmpty);
+    expect(migrated['materialUnits'], hasLength(1));
+  });
+
   testWidgets('refuses persisted Unlocated spools with broken invariants', (
     tester,
   ) async {
@@ -1008,6 +1136,7 @@ void appSmokeSuite() {
         () => Future<void>.delayed(const Duration(milliseconds: 20)),
       );
     }
+    await tester.pumpAndSettle();
     expect(find.text('Corrected roll'), findsOneWidget);
     expect(find.text('#ABCDEF'), findsOneWidget);
     expect(find.text('500 g'), findsWidgets);
@@ -1052,17 +1181,23 @@ void appSmokeSuite() {
     await _pumpInteraction(tester);
     await tester.tap(find.text('Add filament spool'));
     await _pumpInteraction(tester);
+    final picker = find.byTooltip('Open color picker');
+    await Scrollable.ensureVisible(tester.element(picker), alignment: 0.5);
+    await _pumpInteraction(tester);
+    await tester.tap(picker);
+    await _pumpInteraction(tester);
+    expect(find.text('Choose one representative color'), findsOneWidget);
+    final bluePreset = find.widgetWithText(ChoiceChip, 'Blue');
+    await Scrollable.ensureVisible(tester.element(bluePreset), alignment: .5);
+    await tester.pumpAndSettle();
+    await tester.tap(bluePreset);
+    await _pumpInteraction(tester);
+    await tester.tap(find.text('Apply color'));
+    await _pumpInteraction(tester);
     await tester.enterText(
       find.bySemanticsLabel('Material type'),
       'Rainbow PLA',
     );
-    await tester.tap(find.text('Pick filament color'));
-    await _pumpInteraction(tester);
-    expect(find.text('Choose one representative color'), findsOneWidget);
-    await tester.ensureVisible(find.text('Blue'));
-    await _pumpInteraction(tester);
-    await tester.tap(find.text('Blue'));
-    await _pumpInteraction(tester);
     await tester.enterText(
       find.bySemanticsLabel('Remaining quantity (g)'),
       '300',
@@ -1075,6 +1210,166 @@ void appSmokeSuite() {
     expect(find.text('#3468C0'), findsOneWidget);
     expect(find.text('Unlocated'), findsOneWidget);
   });
+
+  testWidgets(
+    'registration distinguishes required fields and active input values',
+    (tester) async {
+      await _launchApp(
+        tester,
+        inventoryStoreFactory,
+        nfcService,
+        incomingLinkService,
+      );
+      await tester.tap(find.text('Spools'));
+      await _pumpInteraction(tester);
+      await tester.tap(find.text('Add filament spool'));
+      await _pumpInteraction(tester);
+
+      expect(find.text('REQUIRED DETAILS'), findsOneWidget);
+      expect(find.text('OPTIONAL DETAILS'), findsOneWidget);
+      expect(find.text('Required'), findsNWidgets(3));
+      expect(find.text('Optional'), findsNWidgets(5));
+
+      await tester.tap(find.text('PETG'));
+      final material = tester.widget<TextField>(
+        find.byWidgetPredicate(
+          (widget) =>
+              widget is TextField &&
+              widget.decoration?.labelText == 'Material type',
+        ),
+      );
+      expect(material.controller?.text, 'PETG');
+      expect(material.style?.color, const Color(0xFF18211B));
+      expect(material.decoration?.labelStyle?.color, const Color(0xFF68736B));
+    },
+  );
+
+  testWidgets(
+    'integrated color field offers presets and a continuous custom picker',
+    (tester) async {
+      await _launchApp(
+        tester,
+        inventoryStoreFactory,
+        nfcService,
+        incomingLinkService,
+      );
+      await tester.tap(find.text('Spools'));
+      await _pumpInteraction(tester);
+      await tester.tap(find.text('Add filament spool'));
+      await _pumpInteraction(tester);
+
+      expect(find.text('Pick filament color'), findsNothing);
+      final openPicker = find.byTooltip('Open color picker');
+      expect(openPicker, findsOneWidget);
+      await tester.ensureVisible(openPicker);
+      await _pumpInteraction(tester);
+      await tester.tap(openPicker);
+      await _pumpInteraction(tester);
+      expect(find.text('Choose one representative color'), findsOneWidget);
+      expect(find.text('PRESETS'), findsOneWidget);
+      expect(find.text('CUSTOM COLOR'), findsOneWidget);
+      expect(find.text('Hue'), findsOneWidget);
+      expect(find.bySemanticsLabel('Hue spectrum'), findsOneWidget);
+      expect(find.text('Saturation'), findsOneWidget);
+      expect(find.text('Brightness'), findsOneWidget);
+
+      await tester.tap(find.widgetWithText(ChoiceChip, 'Blue'));
+      await _pumpInteraction(tester);
+      final hexField = find.byWidgetPredicate(
+        (widget) =>
+            widget is TextField &&
+            widget.decoration?.labelText == 'Hex color (#RRGGBB)',
+      );
+      expect(tester.widget<TextField>(hexField).controller?.text, '#3468C0');
+      await tester.ensureVisible(find.text('Hue'));
+      await tester.drag(find.byType(Slider).first, const Offset(50, 0));
+      await _pumpInteraction(tester);
+      expect(
+        tester.widget<TextField>(hexField).controller?.text,
+        isNot('#3468C0'),
+      );
+
+      await tester.enterText(hexField, '#12AB34');
+      await tester.tap(find.text('Apply color'));
+      await _pumpInteraction(tester);
+      final mainColor = find.byWidgetPredicate(
+        (widget) =>
+            widget is TextField &&
+            widget.decoration?.labelText == 'Filament color (#RRGGBB)',
+      );
+      expect(tester.widget<TextField>(mainColor).controller?.text, '#12AB34');
+    },
+  );
+
+  testWidgets(
+    'spool form and color picker fit compact screens with larger text',
+    (tester) async {
+      tester.view.physicalSize = const Size(320, 800);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      addTearDown(
+        tester.binding.platformDispatcher.clearTextScaleFactorTestValue,
+      );
+      tester.binding.platformDispatcher.textScaleFactorTestValue = 1.4;
+
+      await _launchApp(
+        tester,
+        inventoryStoreFactory,
+        nfcService,
+        incomingLinkService,
+      );
+      await tester.tap(find.text('Spools'));
+      await _pumpInteraction(tester);
+      expect(tester.takeException(), isNull);
+      await tester.tap(find.text('Add filament spool'));
+      await _pumpInteraction(tester);
+      expect(find.text('REQUIRED DETAILS'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+
+      final picker = find.byTooltip('Open color picker');
+      await Scrollable.ensureVisible(tester.element(picker), alignment: .5);
+      await _pumpInteraction(tester);
+      await tester.tap(picker);
+      await _pumpInteraction(tester);
+      expect(find.text('Choose one representative color'), findsOneWidget);
+      expect(find.text('Apply color'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'registration sheet stays inside the system inset with keyboard',
+    (tester) async {
+      tester.view.physicalSize = const Size(360, 480);
+      tester.view.devicePixelRatio = 1;
+      tester.view.padding = const FakeViewPadding(top: 48, bottom: 24);
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      addTearDown(tester.view.resetPadding);
+      addTearDown(tester.view.resetViewInsets);
+
+      await _launchApp(
+        tester,
+        inventoryStoreFactory,
+        nfcService,
+        incomingLinkService,
+      );
+      await tester.tap(find.text('Spools'));
+      await _pumpInteraction(tester);
+      await tester.tap(find.text('Add filament spool'));
+      await _pumpInteraction(tester);
+      tester.view.viewInsets = const FakeViewPadding(bottom: 260);
+      await _pumpInteraction(tester);
+
+      expect(find.text('Register as Unlocated'), findsOneWidget);
+      expect(
+        tester.getTopLeft(find.byType(BottomSheet)).dy,
+        greaterThanOrEqualTo(48),
+      );
+      expect(tester.takeException(), isNull);
+    },
+  );
 
   testWidgets('moves assistive focus through registration and back to Spools', (
     tester,
@@ -1092,7 +1387,7 @@ void appSmokeSuite() {
     await _pumpInteraction(tester);
     expect(
       tester
-          .getSemantics(find.bySemanticsLabel('Material type'))
+          .getSemantics(find.text('Register as Unlocated'))
           .flagsCollection
           .isFocused,
       Tristate.isTrue,
@@ -1304,6 +1599,7 @@ Future<void> _confirmSpoolRegistration(WidgetTester tester) async {
             .text('Could not register filament spool. Try again.')
             .evaluate()
             .isNotEmpty) {
+      await tester.pumpAndSettle();
       return;
     }
     await tester.runAsync(

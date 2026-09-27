@@ -59,6 +59,87 @@ final class FilaDetailRow extends StatelessWidget {
   );
 }
 
+final class FilaFormField extends StatelessWidget {
+  const FilaFormField({
+    required this.controller,
+    required this.label,
+    required this.isRequired,
+    this.focusNode,
+    this.autofocus = false,
+    this.keyboardType,
+    this.maxLines = 1,
+    this.onChanged,
+    this.onSubmitted,
+    this.prefixIcon,
+    this.suffixIcon,
+    super.key,
+  });
+
+  final TextEditingController controller;
+  final String label;
+  final bool isRequired;
+  final FocusNode? focusNode;
+  final bool autofocus;
+  final TextInputType? keyboardType;
+  final int maxLines;
+  final ValueChanged<String>? onChanged;
+  final ValueChanged<String>? onSubmitted;
+  final Widget? prefixIcon;
+  final Widget? suffixIcon;
+
+  @override
+  Widget build(BuildContext context) {
+    const outline = OutlineInputBorder(
+      borderRadius: BorderRadius.all(Radius.circular(16)),
+      borderSide: BorderSide(color: FilaColors.line),
+    );
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: TextField(
+        controller: controller,
+        focusNode: focusNode,
+        autofocus: autofocus,
+        keyboardType: keyboardType,
+        maxLines: maxLines,
+        onChanged: onChanged,
+        onSubmitted: onSubmitted,
+        style: const TextStyle(
+          color: FilaColors.ink,
+          fontSize: 16,
+          fontWeight: FontWeight.w600,
+          height: 1.25,
+        ),
+        decoration: InputDecoration(
+          labelText: label,
+          labelStyle: const TextStyle(
+            color: FilaColors.muted,
+            fontWeight: FontWeight.w600,
+          ),
+          floatingLabelStyle: const TextStyle(
+            color: FilaColors.muted,
+            fontWeight: FontWeight.w600,
+          ),
+          helperText: isRequired ? 'Required' : 'Optional',
+          helperStyle: const TextStyle(color: FilaColors.muted, fontSize: 11),
+          filled: true,
+          fillColor: Colors.white,
+          border: outline,
+          enabledBorder: outline,
+          focusedBorder: outline.copyWith(
+            borderSide: const BorderSide(color: FilaColors.green, width: 1.5),
+          ),
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 16,
+            vertical: 18,
+          ),
+          prefixIcon: prefixIcon,
+          suffixIcon: suffixIcon,
+        ),
+      ),
+    );
+  }
+}
+
 final class FilaAppHeader extends StatelessWidget {
   const FilaAppHeader({super.key});
 

@@ -287,6 +287,7 @@ final class _InventoryShellState extends State<_InventoryShell> {
     final registration = await showModalBottomSheet<SpoolRegistration>(
       context: context,
       isScrollControlled: true,
+      useSafeArea: true,
       builder: (context) => const RegisterSpoolSheet(),
     );
     if (!mounted) {
@@ -340,6 +341,7 @@ final class _InventoryShellState extends State<_InventoryShell> {
     final updated = await showModalBottomSheet<SpoolRegistration>(
       context: context,
       isScrollControlled: true,
+      useSafeArea: true,
       builder: (context) => RegisterSpoolSheet(editingSpool: spool),
     );
     if (!mounted) return;
@@ -1264,21 +1266,23 @@ final class _StorageSlotSheetState extends State<_StorageSlotSheet> {
                       style: Theme.of(context).textTheme.headlineMedium,
                     ),
                     const SizedBox(height: 18),
-                    TextField(
+                    const FilaEyebrow('Required details'),
+                    const SizedBox(height: 8),
+                    FilaFormField(
                       controller: _nameController,
+                      label: 'Storage-slot name',
+                      isRequired: true,
                       autofocus: true,
-                      decoration: const InputDecoration(
-                        labelText: 'Storage-slot name',
-                      ),
                       onChanged: (_) => setState(() => _error = null),
                       onSubmitted: name.isEmpty ? null : (_) => _review(),
                     ),
-                    const SizedBox(height: 12),
-                    TextField(
+                    const SizedBox(height: 8),
+                    const FilaEyebrow('Optional details'),
+                    const SizedBox(height: 8),
+                    FilaFormField(
                       controller: _areaController,
-                      decoration: const InputDecoration(
-                        labelText: 'Storage area (optional)',
-                      ),
+                      label: 'Storage area',
+                      isRequired: false,
                       onChanged: (_) => setState(() => _error = null),
                     ),
                     if (_error != null) ...[_PlaceSheetError(_error!)],
@@ -1399,11 +1403,12 @@ final class _MaterialUnitSheetState extends State<_MaterialUnitSheet> {
                     style: Theme.of(context).textTheme.headlineMedium,
                   ),
                   const SizedBox(height: 18),
-                  TextField(
+                  const FilaEyebrow('Required details'),
+                  const SizedBox(height: 8),
+                  FilaFormField(
                     controller: _nameController,
-                    decoration: const InputDecoration(
-                      labelText: 'Material-unit name',
-                    ),
+                    label: 'Material-unit name',
+                    isRequired: true,
                     onChanged: (_) => setState(() => _error = null),
                   ),
                   const SizedBox(height: 16),
@@ -1414,11 +1419,10 @@ final class _MaterialUnitSheetState extends State<_MaterialUnitSheet> {
                     index < _slotControllers.length;
                     index++
                   ) ...[
-                    TextField(
+                    FilaFormField(
                       controller: _slotControllers[index],
-                      decoration: InputDecoration(
-                        labelText: 'Material-slot name ${index + 1}',
-                      ),
+                      label: 'Material-slot name ${index + 1}',
+                      isRequired: true,
                       onChanged: (_) => setState(() => _error = null),
                     ),
                     const SizedBox(height: 8),

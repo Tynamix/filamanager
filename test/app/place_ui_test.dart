@@ -1,5 +1,6 @@
 import 'package:filamanager/app/app.dart';
 import 'package:filamanager/app/app_dependencies.dart';
+import 'package:filamanager/infrastructure/persistence/json_inventory_store.dart';
 import 'package:filamanager/inventory/storage_slot.dart';
 import 'package:filamanager/inventory/storage_slot_id.dart';
 import 'package:filamanager/inventory/material_unit.dart';
@@ -11,6 +12,45 @@ import 'package:flutter_test/flutter_test.dart';
 import '../support/app_smoke_suite.dart';
 
 void main() {
+  testWidgets('place fields share the required and active-value hierarchy', (
+    tester,
+  ) async {
+    final nfc = FakeNfcService();
+    final links = FakeIncomingLinkService();
+    addTearDown(nfc.close);
+    addTearDown(links.close);
+    final app = await AppDependencies.initialize(
+      inventoryStore: FakeInventoryStore(),
+      nfcService: nfc,
+      incomingLinkService: links,
+    );
+    await tester.pumpWidget(FilaManagerApp(dependencies: app));
+    await tester.tap(find.text('Places'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Add place'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Storage slot'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('REQUIRED DETAILS'), findsOneWidget);
+    expect(find.text('OPTIONAL DETAILS'), findsOneWidget);
+    expect(find.text('Required'), findsOneWidget);
+    expect(find.text('Optional'), findsOneWidget);
+    await tester.enterText(
+      find.bySemanticsLabel('Storage-slot name'),
+      'Shelf A',
+    );
+    final nameField = tester.widget<TextField>(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is TextField &&
+            widget.decoration?.labelText == 'Storage-slot name',
+      ),
+    );
+    expect(nameField.style?.color, const Color(0xFF18211B));
+    expect(nameField.decoration?.labelStyle?.color, const Color(0xFF68736B));
+  });
+
   testWidgets('name conflict is announced and leaves saved places unchanged', (
     tester,
   ) async {
@@ -132,10 +172,7 @@ void main() {
       find.bySemanticsLabel('Storage-slot name'),
       'Shelf A',
     );
-    await tester.enterText(
-      find.bySemanticsLabel('Storage area (optional)'),
-      'Workshop',
-    );
+    await tester.enterText(find.bySemanticsLabel('Storage area'), 'Workshop');
     await tester.tap(find.text('Review storage slot'));
     await tester.pumpAndSettle();
     await tester.runAsync(
@@ -154,10 +191,7 @@ void main() {
       find.bySemanticsLabel('Storage-slot name'),
       'Shelf B',
     );
-    await tester.enterText(
-      find.bySemanticsLabel('Storage area (optional)'),
-      '',
-    );
+    await tester.enterText(find.bySemanticsLabel('Storage area'), '');
     await tester.tap(find.text('Review storage slot'));
     await tester.pumpAndSettle();
     await tester.runAsync(
@@ -202,6 +236,11 @@ void main() {
       find.bySemanticsLabel('Material-slot name 2'),
       'Right',
     );
+    await Scrollable.ensureVisible(
+      tester.element(find.text('Review material unit')),
+      alignment: .6,
+    );
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Review material unit'));
     await tester.pumpAndSettle();
     expect(find.text('REVIEW MATERIAL UNIT'), findsOneWidget);
@@ -222,6 +261,11 @@ void main() {
       find.bySemanticsLabel('Material-slot name 2'),
       'Rear',
     );
+    await Scrollable.ensureVisible(
+      tester.element(find.text('Review material unit')),
+      alignment: .6,
+    );
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Review material unit'));
     await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(FilledButton, 'Save material unit'));
@@ -236,7 +280,7 @@ void main() {
   ) async {
     final store = _SeededInventoryStore(
       InventoryDocument(
-        schemaVersion: 2,
+        schemaVersion: JsonInventoryStore.currentSchemaVersion,
         storageSlots: [
           StorageSlot(
             id: StorageSlotId.parse('AbCdEfGhIjKlMnOpQrStUv'),
@@ -273,7 +317,7 @@ void main() {
   testWidgets('active Places browsing hides archived places', (tester) async {
     final store = _SeededInventoryStore(
       InventoryDocument(
-        schemaVersion: 2,
+        schemaVersion: JsonInventoryStore.currentSchemaVersion,
         storageSlots: [
           StorageSlot(
             id: StorageSlotId.parse('AbCdEfGhIjKlMnOpQrStUv'),
@@ -323,7 +367,7 @@ void main() {
   ) async {
     final store = _SeededInventoryStore(
       InventoryDocument(
-        schemaVersion: 2,
+        schemaVersion: JsonInventoryStore.currentSchemaVersion,
         materialUnits: [
           MaterialUnit(
             id: PlaceId.parse('AaBbCcDdEeFfGgHhIiJjKk'),
